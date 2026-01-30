@@ -69,7 +69,7 @@ st.write(f"📍 Lucas do Rio Verde - MT | {datetime.now().strftime('%d/%m/%Y')}"
 tab1, tab2 = st.tabs(["📥 Lançar Agora", "📈 Meus Relatórios"])
 
 with tab1:
-    st.info("💡 Digite como se fosse no WhatsApp: 'Urbano 200, Bora 150, Energia 40'")
+    st.info("💡 Digite como se fosse no WhatsApp: 'Urbano 239. Boraali 164. App 106'")
     
     entrada_texto = st.text_area("O que aconteceu hoje?", placeholder="Ex: Fiz 300 no urbano e 100 no boraali. Gastei 50 de energia.")
     
@@ -99,7 +99,7 @@ with tab1:
                 nova_linha[col] = val
             
             if km_lido > 0:
-                ultimo_km = df['KM_Final'].iloc[-1] if not df.empty else km_lido
+                ultimo_km = df['KM_Final'].iloc[-1] if not df.empty and not pd.isna(df['KM_Final'].iloc[-1]) else km_lido
                 nova_linha['KM_Final'] = km_lido
                 nova_linha['Km_rodados'] = km_lido - ultimo_km
             
@@ -133,3 +133,4 @@ with tab2:
         st.dataframe(df.tail(10))
     else:
         st.warning("Ainda não existem dados para gerar relatórios.")
+
