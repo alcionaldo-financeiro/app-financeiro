@@ -1,198 +1,135 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
+from PIL import Image
+import pytesseract
+import re
 from datetime import datetime
 import os
-from PIL import Image
-import re
+import plotly.express as px
 
-# Tenta importar o leitor de imagens (OCR)
-try:
-    import pytesseract
-    # SE PRECISAR, AJUSTE O CAMINHO ONDE INSTALOU O TESSERACT NO WINDOWS:
-    # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-    OCR_DISPONIVEL = True
-except ImportError:
-    OCR_DISPONIVEL = False
+# Configurações do Fuso e Estilo
+st.set_page_config(page_title="BYD Dolphin - Gestão Inteligente", page_icon="⚡", layout="wide")
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Gestão Motorista - BYD Dolphin", layout="centered", page_icon="🚗")
+# Banco de dados (CSV que simula sua planilha Base)
+ARQUIVO_BASE = "base_motorista.csv"
 
-# --- CONEXÃO COM BANCO DE DADOS ---
-CAMINHO_DO_SCRIPT = os.path.dirname(os.path.abspath(__file__))
-NOME_BANCO = os.path.join(CAMINHO_DO_SCRIPT, "banco_financeiro.db")
+def inicializar_dados():
+    if not os.path.exists(ARQUIVO_BASE):
+        # Criando com as colunas EXATAS da sua planilha enviada
+        colunas = ['Data', 'Urbano', 'Boraali', 'app163', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'KM_Final', 'Km_rodados']
+        df = pd.DataFrame(columns=colunas)
+        df.to_csv(ARQUIVO_BASE, index=False)
+    return pd.read_csv(ARQUIVO_BASE)
 
-def conectar_banco():
-    return sqlite3.connect(NOME_BANCO)
+def salvar(df):
+    df.to_csv(ARQUIVO_BASE, index=False)
 
-def criar_tabelas():
-    conn = conectar_banco()
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS financas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data TEXT,
-            receita_total REAL,
-            custos_total REAL,
-            km_rodados REAL,
-            lucro_liquido REAL,
-            lucro_por_km REAL,
-            urbano REAL,
-            boraali REAL,
-            app163 REAL,
-            outros_rec REAL,
-            energia REAL,
-            manutencao REAL,
-            seguro REAL,
-            km_inicial REAL,
-            km_final REAL
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-# Garante que a tabela existe
-criar_tabelas()
-
-# --- FUNÇÃO DE INTELIGÊNCIA (LER IMAGEM) ---
-def ler_imagem(imagem):
-    if not OCR_DISPONIVEL:
-        return "Erro: Biblioteca pytesseract não instalada.", 0.0
+def processar_texto_inteligente(frase):
+    """Lê a frase e separa os valores por categoria"""
+    frase = frase.lower()
+    resultados = {}
     
-    try:
-        texto = pytesseract.image_to_string(imagem)
-        # Limpa o texto para achar números
-        # Procura padrões de dinheiro (Ex: R$ 20,50 ou 20.50)
-        padrao_dinheiro = r'R\$\s?(\d+[.,]?\d*)'
-        numeros = re.findall(padrao_dinheiro, texto.replace(',', '.'))
+    # Padronização de nomes (conforme sua planilha)
+    categorias = {
+        'urbano': 'Urbano',
+        'bora': 'Boraali',
+        'ali': 'Boraali',
+        '163': 'app163',
+        'uber': 'app163',
+        '99': 'app163',
+        'energia': 'Energia',
+        'luz': 'Energia',
+        'carga': 'Energia',
+        'combust': 'Energia',
+        'manut': 'Manuten',
+        'lava': 'Manuten',
+        'seguro': 'Seguro',
+        'mensal': 'Aplicativo',
+        'app': 'Aplicativo'
+    }
+    
+    # Encontra números e palavras próximas
+    for chave, coluna in categorias.items():
+        if chave in frase:
+            # Busca o número que vem perto da palavra chave
+            match = re.search(rf'{chave}.*?(\d+[\.,]?\d*)', frase)
+            if match:
+                valor = float(match.group(1).replace(',', '.'))
+                resultados[coluna] = valor
+    
+    return resultados
+
+# --- INTERFACE ---
+df = inicializar_dados()
+
+st.title("⚡ BYD Dolphin - Gestão Automática")
+st.write(f"📍 Lucas do Rio Verde - MT | {datetime.now().strftime('%d/%m/%Y')}")
+
+# TABS: LANÇAMENTO | RELATÓRIOS
+tab1, tab2 = st.tabs(["📥 Lançar Agora", "📈 Meus Relatórios"])
+
+with tab1:
+    st.info("💡 Digite como se fosse no WhatsApp: 'Urbano 200, Bora 150, Energia 40'")
+    
+    entrada_texto = st.text_area("O que aconteceu hoje?", placeholder="Ex: Fiz 300 no urbano e 100 no boraali. Gastei 50 de energia.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        foto_painel = st.file_uploader("📷 Foto do Painel (KM)", type=['png', 'jpg', 'jpeg'])
+    
+    if st.button("🚀 Processar e Salvar Tudo"):
+        dados_hoje = processar_texto_inteligente(entrada_texto)
+        km_lido = 0
         
-        # Se achar números, tenta pegar o maior (geralmente é o total)
-        maior_valor = 0.0
-        if numeros:
-            valores = [float(n.replace('R$', '').strip()) for n in numeros]
-            maior_valor = max(valores)
+        # Se tiver foto, tenta ler o KM
+        if foto_painel:
+            texto_img = pytesseract.image_to_string(Image.open(foto_painel))
+            numeros = re.findall(r'\d+', texto_img)
+            # Filtra números que parecem KM (ex: acima de 1000)
+            kms = [int(n) for n in numeros if int(n) > 1000]
+            if kms:
+                km_lido = max(kms)
+        
+        if dados_hoje or km_lido > 0:
+            # Criar linha nova
+            nova_linha = {col: 0 for col in df.columns}
+            nova_linha['Data'] = datetime.now().strftime("%Y-%m-%d")
             
-        return texto, maior_valor
-    except Exception as e:
-        return f"Erro na leitura: {e}", 0.0
+            for col, val in dados_hoje.items():
+                nova_linha[col] = val
+            
+            if km_lido > 0:
+                ultimo_km = df['KM_Final'].iloc[-1] if not df.empty else km_lido
+                nova_linha['KM_Final'] = km_lido
+                nova_linha['Km_rodados'] = km_lido - ultimo_km
+            
+            df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
+            salvar(df)
+            st.success("✅ Tudo organizado e salvo na base!")
+        else:
+            st.error("Não entendi os valores. Tente escrever: 'Urbano 100'...")
 
-# --- TELA PRINCIPAL ---
-st.title("🚗 Gestão Financeira - BYD Dolphin")
-st.markdown("### Controle Diário de Ganhos e Custos")
+with tab2:
+    if not df.empty:
+        st.subheader("Resumo de Desempenho")
+        
+        # Cálculos rápidos
+        receita_total = df['Urbano'].sum() + df['Boraali'].sum() + df['app163'].sum()
+        custo_total = df['Energia'].sum() + df['Manuten'].sum() + df['Seguro'].sum() + df['Aplicativo'].sum()
+        km_total = df['Km_rodados'].sum()
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Faturamento", f"R$ {receita_total:,.2f}")
+        c2.metric("Custos", f"R$ {custo_total:,.2f}")
+        c3.metric("Lucro Líquido", f"R$ {receita_total - custo_total:,.2f}", delta=f"R$ {(receita_total-custo_total)/km_total:.2f}/km" if km_total > 0 else None)
 
-# Abas para separar Manual de Automático
-aba_manual, aba_auto, aba_dados = st.tabs(["📝 Lançamento Manual", "📸 Leitura Automática (BETA)", "📊 Relatórios"])
-
-# --- VARIÁVEIS DE ESTADO ---
-if 'valor_lido_ocr' not in st.session_state:
-    st.session_state['valor_lido_ocr'] = 0.0
-if 'km_lido_ocr' not in st.session_state:
-    st.session_state['km_lido_ocr'] = 0.0
-
-with aba_auto:
-    st.header("📸 Leitura de Prints")
-    if not OCR_DISPONIVEL:
-        st.warning("⚠️ Para usar essa função, você precisa instalar o 'Tesseract' e a biblioteca 'pytesseract'.")
-        st.code("pip install pytesseract Pillow")
+        # Gráfico de Ganhos por Dia
+        df_grafico = df.copy()
+        df_grafico['Ganhos'] = df_grafico['Urbano'] + df_grafico['Boraali'] + df_grafico['app163']
+        fig = px.bar(df_grafico, x='Data', y='Ganhos', title="Ganhos Diários", color_discrete_sequence=['#00CC96'])
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.write("📋 Últimos Lançamentos")
+        st.dataframe(df.tail(10))
     else:
-        uploaded_file = st.file_uploader("Solte o Print do App ou Painel aqui", type=['png', 'jpg', 'jpeg'])
-        if uploaded_file is not None:
-            image = Image.open(uploaded_file)
-            st.image(image, caption='Imagem Carregada', use_column_width=True)
-            
-            if st.button("🔍 Ler Imagem Agora"):
-                texto_extraido, valor = ler_imagem(image)
-                st.success(f"Valor Identificado: R$ {valor:.2f}")
-                st.text_area("Texto Bruto Lido (Para conferência)", texto_extraido, height=100)
-                
-                # Botões para jogar o valor para o campo certo
-                col1, col2, col3 = st.columns(3)
-                if col1.button("É Uber/99?"):
-                    st.session_state['valor_lido_ocr'] = valor
-                    st.toast(f"Valor R$ {valor} enviado para Receita!")
-                if col2.button("É KM Final?"):
-                    st.session_state['km_lido_ocr'] = valor
-                    st.toast(f"KM {valor} enviado para KM Final!")
-
-with aba_manual:
-    with st.form("form_lancamento"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("💰 Receitas (Ganhos)")
-            urbano = st.number_input("Urbano Norte (R$)", min_value=0.0, step=0.10)
-            boraali = st.number_input("Bora Ali (R$)", min_value=0.0, step=0.10)
-            app163 = st.number_input("APP 163 / 99 / Uber (R$)", min_value=0.0, value=st.session_state['valor_lido_ocr'], step=0.10)
-            outros_rec = st.number_input("Particulares / Outros (R$)", min_value=0.0, step=0.10)
-            
-        with col2:
-            st.subheader("💸 Custos & KM")
-            energia = st.number_input("Energia (KWh/R$)", min_value=0.0, step=0.10)
-            manuten = st.number_input("Manutenção/Lava Jato", min_value=0.0, step=0.10)
-            
-            st.markdown("---")
-            # Tenta pegar o último KM salvo para facilitar
-            ultimo_km = 0.0
-            try:
-                conn = conectar_banco()
-                ultimo = pd.read_sql_query("SELECT km_final FROM financas ORDER BY id DESC LIMIT 1", conn)
-                conn.close()
-                if not ultimo.empty:
-                    ultimo_km = ultimo['km_final'].iloc[0]
-            except:
-                pass
-
-            km_inicial = st.number_input("KM Inicial do Dia", min_value=0.0, value=float(ultimo_km), format="%.1f")
-            km_final = st.number_input("KM Final do Dia", min_value=0.0, value=float(st.session_state['km_lido_ocr']), format="%.1f")
-        
-        # Cálculos Automáticos
-        receita_total = urbano + boraali + app163 + outros_rec
-        custos_total = energia + manuten
-        km_rodados = km_final - km_inicial
-        
-        st.markdown(f"### 💵 Total Receita: :green[R$ {receita_total:.2f}]")
-        st.markdown(f"### 🛣️ KM Rodados: {km_rodados:.1f} km")
-        
-        enviar = st.form_submit_button("💾 SALVAR NO SISTEMA")
-        
-        if enviar:
-            if km_rodados < 0:
-                st.error("⚠️ Erro: KM Final menor que Inicial!")
-            else:
-                lucro = receita_total - custos_total
-                lucro_km = (lucro / km_rodados) if km_rodados > 0 else 0
-                data_hoje = datetime.now().strftime("%Y-%m-%d")
-                
-                conn = conectar_banco()
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO financas (data, receita_total, custos_total, km_rodados, lucro_liquido, lucro_por_km, 
-                    urbano, boraali, app163, outros_rec, energia, manutencao, seguro, km_inicial, km_final)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                ''', (data_hoje, receita_total, custos_total, km_rodados, lucro, lucro_km, 
-                      urbano, boraali, app163, outros_rec, energia, manuten, km_inicial, km_final))
-                conn.commit()
-                conn.close()
-                st.success("✅ Lançamento salvo com sucesso!")
-                # Limpa os estados
-                st.session_state['valor_lido_ocr'] = 0.0
-                st.session_state['km_lido_ocr'] = 0.0
-                st.rerun()
-
-with aba_dados:
-    st.subheader("📊 Histórico de Corridas")
-    conn = conectar_banco()
-    try:
-        df = pd.read_sql_query("SELECT * FROM financas ORDER BY id DESC", conn)
-        st.dataframe(df)
-        
-        if not df.empty:
-            total_mes = df['receita_total'].sum()
-            meta = 15000.00
-            falta = meta - total_mes
-            st.metric("Faturamento Total", f"R$ {total_mes:.2f}")
-            st.progress(min(total_mes / meta, 1.0))
-            st.caption(f"Meta: R$ 15.000 | Falta: R$ {falta:.2f}")
-    except:
-        st.info("Nenhum dado lançado ainda.")
-    conn.close()
+        st.warning("Ainda não existem dados para gerar relatórios.")
