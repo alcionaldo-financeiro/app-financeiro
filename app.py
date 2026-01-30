@@ -133,4 +133,3 @@ with tab2:
         st.dataframe(df.tail(10))
     else:
         st.warning("Ainda não existem dados para gerar relatórios.")
-
