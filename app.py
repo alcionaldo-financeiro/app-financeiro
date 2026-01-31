@@ -6,6 +6,7 @@ import pytesseract
 import re
 from datetime import datetime
 import plotly.express as px
+import time # Importante para dar tempo de ver a mensagem de sucesso
 
 # --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="BYD Pro - Gestão Inteligente", page_icon="💎", layout="wide")
@@ -22,13 +23,10 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # --- SISTEMA DE CONEXÃO "CORINGA" ---
 def conectar_banco():
     try:
-        # Tenta ler a PRIMEIRA aba da planilha (Index 0), não importa o nome!
-        # Isso resolve problemas de nomes errados ou espaços invisíveis.
+        # Lê a PRIMEIRA aba (Index 0) para evitar erro de nome
         df = conn.read(worksheet=0, ttl="0")
         
-        # Verifica se a planilha está virgem (menos de 2 colunas)
         if df is None or df.empty or len(df.columns) < 2:
-            # Se estiver vazia, cria o cabeçalho
             df_novo = pd.DataFrame(columns=COLUNAS_OFICIAIS)
             conn.update(worksheet=0, data=df_novo)
             return df_novo, "Primeira Aba (Auto)"
@@ -60,13 +58,11 @@ NOME_USUARIO = st.session_state['usuario']
 
 try:
     cols_num = ['Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos', 'KM_Final']
-    # Garante que as colunas existem antes de converter
     if not df_geral.empty:
         for col in cols_num:
             if col in df_geral.columns:
                 df_geral[col] = pd.to_numeric(df_geral[col], errors='coerce').fillna(0)
     
-    # Se a coluna Usuario existir, filtra. Se não, devolve vazio para não quebrar.
     if 'Usuario' in df_geral.columns:
         df_usuario = df_geral[df_geral['Usuario'] == NOME_USUARIO].copy()
     else:
@@ -109,16 +105,20 @@ aba1, aba2 = st.tabs(["📝 Lançar", "💰 Extrato"])
 with aba1:
     if "Erro" in STATUS_CONEXAO:
         st.error(f"🚨 {STATUS_CONEXAO}")
-        st.info("Dica: Verifique se apagou a 'Linha 1' (Coluna A) da planilha.")
     else:
         st.success(f"✅ {STATUS_CONEXAO}")
-        
-    texto = st.text_area("O que rolou?", placeholder="Ex: urbano 200, boraali 50")
-    foto = st.file_uploader("Foto KM", type=['png', 'jpg', 'jpeg'])
+    
+    # CRIA CHAVES DE MEMÓRIA PARA PODER LIMPAR DEPOIS
+    if "texto_input" not in st.session_state: st.session_state.texto_input = ""
+    
+    # Campo de texto vinculado à memória
+    texto = st.text_area("O que rolou?", key="texto_input", placeholder="Ex: urbano 200, boraali 50")
+    # Campo de foto com chave para resetar
+    foto = st.file_uploader("Foto KM", key="foto_input", type=['png', 'jpg', 'jpeg'])
     
     if st.button("GRAVAR 🚀", use_container_width=True):
         if "Erro" in STATUS_CONEXAO:
-            st.error("Sem conexão com a planilha.")
+            st.error("Sem conexão.")
         elif not texto and not foto:
             st.warning("Digite algo!")
         else:
@@ -137,24 +137,38 @@ with aba1:
             })
             
             try:
-                # Lê e Salva usando Index 0 (Primeira Aba)
                 df_atual = conn.read(worksheet=0, ttl="0")
                 df_final = pd.concat([df_atual, pd.DataFrame([nova])], ignore_index=True)
                 conn.update(worksheet=0, data=df_final)
+                
                 st.balloons()
-                st.success("Salvo com Sucesso!")
+                st.success("Salvo com Sucesso! Atualizando...")
+                
+                # --- O SEGREDO DO REFRESH ---
+                time.sleep(1.5) # Espera 1.5s pro motorista ler a mensagem
+                st.rerun()      # Recarrega a página (Limpa campos e Atualiza Gráfico)
+                
             except Exception as e:
                 st.error(f"Erro ao salvar: {e}")
 
 with aba2:
     if not df_usuario.empty:
+        # Métricas
         g = df_usuario[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().sum()
         d = df_usuario[['Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos']].sum().sum()
+        
         c1, c2, c3 = st.columns(3)
         c1.metric("Ganhos", f"R$ {g:,.2f}")
         c2.metric("Despesas", f"R$ {d:,.2f}")
         c3.metric("Lucro", f"R$ {g-d:,.2f}")
-        st.dataframe(df_usuario.tail(5))
+        
+        st.divider()
+        
+        # Histórico (Agora mostra o mais recente no topo!)
+        st.write("📋 **Últimos Lançamentos:**")
+        # Inverte a ordem para mostrar o último primeiro
+        df_view = df_usuario.iloc[::-1] 
+        visivel = ['Data', 'Urbano', 'Boraali', 'Energia', 'Detalhes']
+        st.dataframe(df_view[[c for c in visivel if c in df_usuario.columns]].head(10), use_container_width=True)
     else:
-        st.info("Sem dados.")
-
+        st.info("Nenhum dado lançado ainda.")
