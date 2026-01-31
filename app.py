@@ -7,22 +7,38 @@ import re
 from datetime import datetime
 import time
 
-# --- 1. CONFIGURAÇÃO VISUAL (DESIGN PRO) ---
+# --- 1. CONFIGURAÇÃO VISUAL (MODO APP NATIVO) ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
-# CSS para esconder menus do Streamlit e deixar visual limpo (Modo App)
+# --- CSS DE LIMPEZA TOTAL (O SEGREDINHO) ---
 st.markdown("""
     <style>
-    /* Esconde menu e rodapé */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* 1. Esconde o Menu de 3 pontinhos (Hamburguer) */
+    #MainMenu {visibility: hidden; display: none !important;}
     
-    /* Botões mais bonitos */
+    /* 2. Esconde o Rodapé padrão e o botão vermelho */
+    footer {visibility: hidden; display: none !important; height: 0px !important;}
+    header {visibility: hidden; display: none !important;}
+    
+    /* 3. Ajusta o topo para ganhar espaço no celular */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+    }
+    
+    /* 4. Estilo dos Botões Grandes */
     div.stButton > button:first-child {
         border-radius: 12px;
-        height: 3em;
+        height: 3.5em;
         font-weight: bold;
+        font-size: 18px !important;
+        border: none;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    /* 5. Aumenta a fonte das métricas (Valores) */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -48,22 +64,21 @@ def conectar_banco():
 
 df_geral, STATUS = conectar_banco()
 
-# --- LOGIN ---
+# --- LOGIN SIMPLIFICADO ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    c1, c2, c3 = st.columns([1,2,1])
-    with c2:
-        st.title("💎 BYD Pro")
-        st.write("### Acesso do Piloto")
-        usuario = st.text_input("Seu Nome:", placeholder="Digite seu nome...").strip().lower()
-        st.write("")
-        if st.button("ENTRAR 🚀", type="primary", use_container_width=True):
-            if usuario:
-                st.session_state['usuario'] = usuario
-                st.session_state['autenticado'] = True
-                st.rerun()
+    st.markdown("<br><br>", unsafe_allow_html=True) # Espaço para descer
+    st.title("💎 BYD Pro")
+    st.write("### Sistema de Gestão")
+    usuario = st.text_input("Nome do Piloto:", placeholder="Digite seu nome...").strip().lower()
+    st.write("")
+    if st.button("ACESSAR PAINEL 🚀", type="primary", use_container_width=True):
+        if usuario:
+            st.session_state['usuario'] = usuario
+            st.session_state['autenticado'] = True
+            st.rerun()
     st.stop()
 
 # --- DADOS ---
@@ -82,7 +97,7 @@ try:
 except:
     df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
-# --- INTELIGÊNCIA ---
+# --- CÉREBRO ---
 def processar_texto(frase):
     frase = frase.lower().replace(',', '.')
     res = {'Urbano': 0.0, 'Boraali': 0.0, 'app163': 0.0, 'Outros_Receita': 0.0,
@@ -115,41 +130,39 @@ def processar_texto(frase):
     return res
 
 # --- TELA PRINCIPAL ---
-st.markdown(f"#### 🚘 Olá, {NOME_USUARIO.capitalize()}")
+# Cabeçalho Personalizado Limpo
+c_logo, c_nome = st.columns([1, 4])
+with c_logo:
+    st.markdown("## 🚘")
+with c_nome:
+    st.markdown(f"### Olá, {NOME_USUARIO.capitalize()}")
 
-aba_lanc, aba_extrato = st.tabs(["📝 NOVO LANÇAMENTO", "📊 MEU EXTRATO"])
+# Abas grandes
+aba_lanc, aba_extrato = st.tabs(["📝 LANÇAR", "📊 EXTRATO"])
 
 # === ABA 1: LANÇAMENTO ===
 with aba_lanc:
-    # Estado da Conferência
     if 'em_conferencia' not in st.session_state: st.session_state['em_conferencia'] = False
     if 'dados_temp' not in st.session_state: st.session_state['dados_temp'] = {}
 
-    # TELA 1: ENTRADA
+    # TELA 1: DADOS
     if not st.session_state['em_conferencia']:
-        st.markdown("##### O que rolou no plantão?")
+        st.write("Digite seus ganhos e gastos:")
         texto = st.text_area("", key="txt_entrada", placeholder="Ex: urbano 350, bora 100, almoço 20...", height=100)
         
-        st.write("") # Espaço
-        st.markdown("##### 📸 Foto do Painel (KM)")
-        
-        # Mudei para padrão "Galeria" no PC para não assustar com tela preta
-        # No celular o usuário troca para Câmera fácil
-        tipo_foto = st.radio("Fonte:", ["Galeria 📂", "Câmera 📷"], horizontal=True, label_visibility="collapsed")
+        st.write("📸 **Foto do KM**")
+        tipo_foto = st.radio("Fonte:", ["Câmera", "Galeria"], horizontal=True, label_visibility="collapsed")
         
         foto = None
-        if tipo_foto == "Câmera 📷":
-            # TRUQUE VISUAL: Coloca a câmera numa coluna central para não ficar GIGANTE
-            col_esq, col_meio, col_dir = st.columns([1, 2, 1]) 
-            with col_meio:
-                foto = st.camera_input("Tirar Foto")
+        if tipo_foto == "Câmera":
+            foto = st.camera_input("Tirar Foto")
         else:
             foto = st.file_uploader("Carregar Foto", type=['png', 'jpg', 'jpeg'])
         
-        st.write("") 
-        if st.button("CONTINUAR ➡️", type="primary", use_container_width=True):
+        st.write("")
+        if st.button("ANALISAR ➡️", type="primary", use_container_width=True):
             if not texto and not foto:
-                st.warning("⚠️ Escreva algo ou tire uma foto.")
+                st.warning("⚠️ Digite algo ou tire uma foto.")
             else:
                 with st.spinner("Processando..."):
                     dados_lidos = processar_texto(texto)
@@ -171,33 +184,30 @@ with aba_lanc:
     # TELA 2: CONFERÊNCIA
     else:
         d = st.session_state['dados_temp']
-        st.info("🔎 Confira se entendi tudo certo:")
+        st.info("🔎 Confira os valores:")
         
         c_receita, c_despesa = st.columns(2)
-        
         with c_receita:
-            st.success("💰 **GANHOS**")
+            st.success("💰 **ENTROU**")
             val_urbano = st.number_input("Urbano", value=d['Urbano'])
             val_bora = st.number_input("BoraAli", value=d['Boraali'])
-            val_outros_rec = st.number_input("Outros/Partic.", value=d['app163'] + d['Outros_Receita'])
+            val_outros_rec = st.number_input("Outros", value=d['app163'] + d['Outros_Receita'])
             
         with c_despesa:
-            st.error("💸 **GASTOS**")
-            val_energia = st.number_input("Energia/Comb.", value=d['Energia'])
-            val_manut = st.number_input("Manutenção/Outros", value=d['Manuten'] + d['Outros_Custos'])
-            val_app = st.number_input("Apps/Mensal", value=d['Aplicativo'])
+            st.error("💸 **SAIU**")
+            val_energia = st.number_input("Energia", value=d['Energia'])
+            val_manut = st.number_input("Manut/Outros", value=d['Manuten'] + d['Outros_Custos'])
+            val_app = st.number_input("Apps", value=d['Aplicativo'])
             
-        st.warning("🚗 **KM Final**")
+        st.warning("🚗 **KM FINAL**")
         val_km = st.number_input("Hodômetro:", value=int(d['KM_Final']), step=1)
         
-        st.write("---")
         col_voltar, col_salvar = st.columns([1, 2])
-        
         if col_voltar.button("↩️ Voltar"):
             st.session_state['em_conferencia'] = False
             st.rerun()
             
-        if col_salvar.button("✅ CONFIRMAR LANÇAMENTO", type="primary", use_container_width=True):
+        if col_salvar.button("✅ CONFIRMAR", type="primary", use_container_width=True):
             nova = {col: 0 for col in COLUNAS_OFICIAIS}
             nova.update({
                 'Usuario': NOME_USUARIO, 'Data': datetime.now().strftime("%Y-%m-%d"),
@@ -205,19 +215,17 @@ with aba_lanc:
                 'Energia': val_energia, 'Manuten': val_manut, 'Seguro': d['Seguro'], 'Aplicativo': val_app,
                 'Outros_Custos': 0, 'KM_Final': val_km, 'Detalhes': ", ".join(d['Detalhes'])
             })
-            
             try:
                 df_atual = conn.read(worksheet=0, ttl="0")
                 df_final = pd.concat([df_atual, pd.DataFrame([nova])], ignore_index=True)
                 conn.update(worksheet=0, data=df_final)
-                
                 st.balloons()
-                st.toast("✅ Salvo com sucesso!", icon="💾")
-                time.sleep(1.5)
+                st.toast("Salvo!", icon="✅")
+                time.sleep(1)
                 st.session_state['em_conferencia'] = False
                 st.rerun()
-            except Exception as e:
-                st.error(f"Erro: {e}")
+            except:
+                st.error("Erro de conexão.")
 
 # === ABA 2: EXTRATO ===
 with aba_extrato:
@@ -226,21 +234,12 @@ with aba_extrato:
         d = df_usuario[['Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos']].sum().sum()
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Faturamento", f"R$ {g:,.2f}")
-        c2.metric("Custos", f"R$ {d:,.2f}")
-        c3.metric("Lucro", f"R$ {g-d:,.2f}")
+        c1.metric("Ganhos", f"R$ {g:,.0f}")
+        c2.metric("Gastos", f"R$ {d:,.0f}")
+        c3.metric("Lucro", f"R$ {g-d:,.0f}")
         
         st.write("---")
-        st.caption("📋 Histórico Recente")
-        df_view = df_usuario.iloc[::-1]
-        st.dataframe(
-            df_view[['Data', 'Urbano', 'Boraali', 'Energia', 'KM_Final']].head(10),
-            use_container_width=True,
-            hide_index=True
-        )
+        st.caption("Histórico (Recentes)")
+        st.dataframe(df_usuario[['Data', 'Urbano', 'Energia', 'KM_Final']].iloc[::-1].head(10), use_container_width=True, hide_index=True)
     else:
         st.info("Sem dados.")
-
-if st.sidebar.button("Sair"): # Deixei escondido na sidebar pra não clicar sem querer
-    st.session_state['autenticado'] = False
-    st.rerun()
