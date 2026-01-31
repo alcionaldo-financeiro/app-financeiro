@@ -10,33 +10,34 @@ import time
 # --- 1. CONFIGURAÇÃO VISUAL (MODO APP NATIVO) ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS DE LIMPEZA TOTAL (O SEGREDINHO) ---
+# --- CSS NUCLEAR (PARA SUMIR COM O BOTÃO VERMELHO) ---
 st.markdown("""
     <style>
-    /* 1. Esconde o Menu de 3 pontinhos (Hamburguer) */
-    #MainMenu {visibility: hidden; display: none !important;}
+    /* 1. Mata o Menu de 3 pontinhos */
+    #MainMenu {visibility: hidden; display: none;}
+    [data-testid="stToolbar"] {visibility: hidden; display: none;}
     
-    /* 2. Esconde o Rodapé padrão e o botão vermelho */
-    footer {visibility: hidden; display: none !important; height: 0px !important;}
-    header {visibility: hidden; display: none !important;}
+    /* 2. Mata o Rodapé e o Botão Vermelho (Deploy) */
+    footer {visibility: hidden; display: none;}
+    header {visibility: hidden; display: none;}
+    .stDeployButton {display: none; visibility: hidden;}
     
-    /* 3. Ajusta o topo para ganhar espaço no celular */
+    /* 3. Ajuste Fino para Mobile (Ganha espaço) */
     .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 0rem !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 1rem !important;
     }
     
-    /* 4. Estilo dos Botões Grandes */
+    /* 4. Botões Grandes e Fortes */
     div.stButton > button:first-child {
         border-radius: 12px;
         height: 3.5em;
         font-weight: bold;
         font-size: 18px !important;
-        border: none;
         box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
     }
     
-    /* 5. Aumenta a fonte das métricas (Valores) */
+    /* 5. Métricas Grandes */
     [data-testid="stMetricValue"] {
         font-size: 2rem !important;
     }
@@ -69,12 +70,12 @@ if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    st.markdown("<br><br>", unsafe_allow_html=True) # Espaço para descer
+    st.markdown("<br>", unsafe_allow_html=True)
     st.title("💎 BYD Pro")
     st.write("### Sistema de Gestão")
-    usuario = st.text_input("Nome do Piloto:", placeholder="Digite seu nome...").strip().lower()
+    usuario = st.text_input("Piloto:", placeholder="Seu nome...").strip().lower()
     st.write("")
-    if st.button("ACESSAR PAINEL 🚀", type="primary", use_container_width=True):
+    if st.button("ACESSAR 🚀", type="primary", use_container_width=True):
         if usuario:
             st.session_state['usuario'] = usuario
             st.session_state['autenticado'] = True
@@ -130,14 +131,12 @@ def processar_texto(frase):
     return res
 
 # --- TELA PRINCIPAL ---
-# Cabeçalho Personalizado Limpo
-c_logo, c_nome = st.columns([1, 4])
+c_logo, c_nome = st.columns([1, 5])
 with c_logo:
     st.markdown("## 🚘")
 with c_nome:
     st.markdown(f"### Olá, {NOME_USUARIO.capitalize()}")
 
-# Abas grandes
 aba_lanc, aba_extrato = st.tabs(["📝 LANÇAR", "📊 EXTRATO"])
 
 # === ABA 1: LANÇAMENTO ===
