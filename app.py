@@ -10,25 +10,21 @@ import time
 # --- 1. CONFIGURAÇÃO VISUAL (MODO APP NATIVO) ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS NUCLEAR (PARA SUMIR COM O BOTÃO VERMELHO) ---
+# --- CSS NUCLEAR (VISUAL APP + CÂMERA COMPACTA) ---
 st.markdown("""
     <style>
-    /* 1. Mata o Menu de 3 pontinhos */
-    #MainMenu {visibility: hidden; display: none;}
-    [data-testid="stToolbar"] {visibility: hidden; display: none;}
-    
-    /* 2. Mata o Rodapé e o Botão Vermelho (Deploy) */
-    footer {visibility: hidden; display: none;}
-    header {visibility: hidden; display: none;}
+    /* 1. Mata o Menu e Rodapé */
+    #MainMenu, footer, header {visibility: hidden; display: none !important;}
+    [data-testid="stToolbar"] {visibility: hidden; display: none !important;}
     .stDeployButton {display: none; visibility: hidden;}
     
-    /* 3. Ajuste Fino para Mobile (Ganha espaço) */
+    /* 2. Ajuste Mobile */
     .block-container {
-        padding-top: 0.5rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 1rem !important;
     }
     
-    /* 4. Botões Grandes e Fortes */
+    /* 3. Botões Estilosos */
     div.stButton > button:first-child {
         border-radius: 12px;
         height: 3.5em;
@@ -37,9 +33,9 @@ st.markdown("""
         box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
     }
     
-    /* 5. Métricas Grandes */
+    /* 4. Métricas Grandes */
     [data-testid="stMetricValue"] {
-        font-size: 2rem !important;
+        font-size: 1.8rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -65,17 +61,16 @@ def conectar_banco():
 
 df_geral, STATUS = conectar_banco()
 
-# --- LOGIN SIMPLIFICADO ---
+# --- LOGIN ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
     st.markdown("<br>", unsafe_allow_html=True)
     st.title("💎 BYD Pro")
-    st.write("### Sistema de Gestão")
     usuario = st.text_input("Piloto:", placeholder="Seu nome...").strip().lower()
     st.write("")
-    if st.button("ACESSAR 🚀", type="primary", use_container_width=True):
+    if st.button("ENTRAR 🚀", type="primary", use_container_width=True):
         if usuario:
             st.session_state['usuario'] = usuario
             st.session_state['autenticado'] = True
@@ -90,7 +85,6 @@ try:
         for col in cols_num:
             if col in df_geral.columns:
                 df_geral[col] = pd.to_numeric(df_geral[col], errors='coerce').fillna(0)
-    
     if 'Usuario' in df_geral.columns:
         df_usuario = df_geral[df_geral['Usuario'] == NOME_USUARIO].copy()
     else:
@@ -104,19 +98,15 @@ def processar_texto(frase):
     res = {'Urbano': 0.0, 'Boraali': 0.0, 'app163': 0.0, 'Outros_Receita': 0.0,
            'Energia': 0.0, 'Manuten': 0.0, 'Seguro': 0.0, 'Aplicativo': 0.0, 'Outros_Custos': 0.0,
            'Detalhes': []}
-    
     mapa = {
         'urbano': 'Urbano', 'bora': 'Boraali', '163': 'app163',
         'particula': 'Outros_Receita', 'viagem': 'Outros_Receita',
-        'energia': 'Energia', 'luz': 'Energia', 'carreg': 'Energia', 
-        'gasolina': 'Energia', 'alcool': 'Energia',
-        'manut': 'Manuten', 'pneu': 'Manuten', 'oleo': 'Manuten', 
-        'lavagem': 'Manuten', 'seguro': 'Seguro', 
-        'app': 'Aplicativo', 'mensalidade': 'Aplicativo',
-        'marmita': 'Outros_Custos', 'almoco': 'Outros_Custos',
-        'almoço': 'Outros_Custos', 'lanche': 'Outros_Custos', 'agua': 'Outros_Custos'
+        'energia': 'Energia', 'luz': 'Energia', 'carreg': 'Energia', 'gasolina': 'Energia',
+        'manut': 'Manuten', 'pneu': 'Manuten', 'oleo': 'Manuten', 'lavagem': 'Manuten',
+        'seguro': 'Seguro', 'app': 'Aplicativo', 'mensalidade': 'Aplicativo',
+        'marmita': 'Outros_Custos', 'almoco': 'Outros_Custos', 'almoço': 'Outros_Custos', 
+        'lanche': 'Outros_Custos', 'agua': 'Outros_Custos'
     }
-    
     pedacos = re.findall(r'([a-z1-9á-úç]+)\s*(\d+[\.]?\d*)', frase)
     for item, valor_str in pedacos:
         valor = float(valor_str)
@@ -130,31 +120,33 @@ def processar_texto(frase):
             res['Detalhes'].append(f"{item}")
     return res
 
-# --- TELA PRINCIPAL ---
+# --- TELA ---
 c_logo, c_nome = st.columns([1, 5])
-with c_logo:
-    st.markdown("## 🚘")
-with c_nome:
-    st.markdown(f"### Olá, {NOME_USUARIO.capitalize()}")
+with c_logo: st.markdown("## 🚘")
+with c_nome: st.markdown(f"### Olá, {NOME_USUARIO.capitalize()}")
 
 aba_lanc, aba_extrato = st.tabs(["📝 LANÇAR", "📊 EXTRATO"])
 
-# === ABA 1: LANÇAMENTO ===
 with aba_lanc:
     if 'em_conferencia' not in st.session_state: st.session_state['em_conferencia'] = False
     if 'dados_temp' not in st.session_state: st.session_state['dados_temp'] = {}
 
     # TELA 1: DADOS
     if not st.session_state['em_conferencia']:
-        st.write("Digite seus ganhos e gastos:")
+        st.write("Resumo do dia:")
         texto = st.text_area("", key="txt_entrada", placeholder="Ex: urbano 350, bora 100, almoço 20...", height=100)
         
-        st.write("📸 **Foto do KM**")
+        st.write("📸 **Foto KM**")
         tipo_foto = st.radio("Fonte:", ["Câmera", "Galeria"], horizontal=True, label_visibility="collapsed")
         
         foto = None
         if tipo_foto == "Câmera":
-            foto = st.camera_input("Tirar Foto")
+            # --- TRUQUE PARA CÂMERA NÃO FICAR GIGANTE ---
+            # Cria 3 colunas: [Vazio] [Câmera] [Vazio]
+            # No celular, a coluna do meio ocupa quase tudo. No PC, ela fica centralizada e menor.
+            col_esq, col_meio, col_dir = st.columns([1, 4, 1])
+            with col_meio:
+                foto = st.camera_input("Tirar Foto")
         else:
             foto = st.file_uploader("Carregar Foto", type=['png', 'jpg', 'jpeg'])
         
@@ -191,7 +183,6 @@ with aba_lanc:
             val_urbano = st.number_input("Urbano", value=d['Urbano'])
             val_bora = st.number_input("BoraAli", value=d['Boraali'])
             val_outros_rec = st.number_input("Outros", value=d['app163'] + d['Outros_Receita'])
-            
         with c_despesa:
             st.error("💸 **SAIU**")
             val_energia = st.number_input("Energia", value=d['Energia'])
@@ -226,19 +217,15 @@ with aba_lanc:
             except:
                 st.error("Erro de conexão.")
 
-# === ABA 2: EXTRATO ===
 with aba_extrato:
     if not df_usuario.empty:
         g = df_usuario[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().sum()
         d = df_usuario[['Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos']].sum().sum()
-        
         c1, c2, c3 = st.columns(3)
         c1.metric("Ganhos", f"R$ {g:,.0f}")
         c2.metric("Gastos", f"R$ {d:,.0f}")
         c3.metric("Lucro", f"R$ {g-d:,.0f}")
-        
         st.write("---")
-        st.caption("Histórico (Recentes)")
         st.dataframe(df_usuario[['Data', 'Urbano', 'Energia', 'KM_Final']].iloc[::-1].head(10), use_container_width=True, hide_index=True)
     else:
         st.info("Sem dados.")
