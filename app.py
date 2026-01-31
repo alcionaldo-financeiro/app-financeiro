@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 import plotly.express as px
 
-# --- CONFIGURAÇÃO DE ELITE ---
+# --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="BYD Pro - Gestão Inteligente", page_icon="💎", layout="wide")
 
 # Colunas Oficiais
@@ -19,27 +19,26 @@ COLUNAS_OFICIAIS = [
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- SISTEMA DE CONEXÃO TURBO ---
+# --- SISTEMA DE CONEXÃO "CORINGA" ---
 def conectar_banco():
-    # Agora inclui o nome exato da sua aba!
-    lista_tentativas = ["Dados_Motoristas_SaaS", "Lancamentos", "Página1", "Pagina1", "Sheet1"]
-    
-    for aba in lista_tentativas:
-        try:
-            df = conn.read(worksheet=aba, ttl="0")
-            # Verifica se tem cabeçalho valido
-            if df is None or df.empty or len(df.columns) < 2:
-                # Se estiver vazia, cria
-                df_novo = pd.DataFrame(columns=COLUNAS_OFICIAIS)
-                conn.update(worksheet=aba, data=df_novo)
-                return df_novo, aba
-            return df, aba
-        except:
-            continue 
+    try:
+        # Tenta ler a PRIMEIRA aba da planilha (Index 0), não importa o nome!
+        # Isso resolve problemas de nomes errados ou espaços invisíveis.
+        df = conn.read(worksheet=0, ttl="0")
+        
+        # Verifica se a planilha está virgem (menos de 2 colunas)
+        if df is None or df.empty or len(df.columns) < 2:
+            # Se estiver vazia, cria o cabeçalho
+            df_novo = pd.DataFrame(columns=COLUNAS_OFICIAIS)
+            conn.update(worksheet=0, data=df_novo)
+            return df_novo, "Primeira Aba (Auto)"
             
-    return pd.DataFrame(columns=COLUNAS_OFICIAIS), "Erro de Permissão"
+        return df, "Conectado!"
+    except Exception as e:
+        return pd.DataFrame(columns=COLUNAS_OFICIAIS), f"Erro: {e}"
 
-df_geral, ABA_ATIVA = conectar_banco()
+# Carrega os dados
+df_geral, STATUS_CONEXAO = conectar_banco()
 
 # --- LOGIN ---
 if 'autenticado' not in st.session_state:
@@ -61,11 +60,17 @@ NOME_USUARIO = st.session_state['usuario']
 
 try:
     cols_num = ['Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos', 'KM_Final']
+    # Garante que as colunas existem antes de converter
     if not df_geral.empty:
         for col in cols_num:
             if col in df_geral.columns:
                 df_geral[col] = pd.to_numeric(df_geral[col], errors='coerce').fillna(0)
-    df_usuario = df_geral[df_geral['Usuario'] == NOME_USUARIO].copy()
+    
+    # Se a coluna Usuario existir, filtra. Se não, devolve vazio para não quebrar.
+    if 'Usuario' in df_geral.columns:
+        df_usuario = df_geral[df_geral['Usuario'] == NOME_USUARIO].copy()
+    else:
+        df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
 except:
     df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
@@ -102,18 +107,18 @@ if st.sidebar.button("Sair"):
 aba1, aba2 = st.tabs(["📝 Lançar", "💰 Extrato"])
 
 with aba1:
-    if "Erro" in ABA_ATIVA:
-        st.error("🚨 ATENÇÃO: O Robô não achou a aba 'Dados_Motoristas_SaaS' ou 'Lancamentos'.")
-        st.info("Verifique se o email motorista-saas... é Editor na planilha.")
+    if "Erro" in STATUS_CONEXAO:
+        st.error(f"🚨 {STATUS_CONEXAO}")
+        st.info("Dica: Verifique se apagou a 'Linha 1' (Coluna A) da planilha.")
     else:
-        st.success(f"✅ Conectado na aba: **{ABA_ATIVA}**")
+        st.success(f"✅ {STATUS_CONEXAO}")
         
     texto = st.text_area("O que rolou?", placeholder="Ex: urbano 200, boraali 50")
     foto = st.file_uploader("Foto KM", type=['png', 'jpg', 'jpeg'])
     
     if st.button("GRAVAR 🚀", use_container_width=True):
-        if "Erro" in ABA_ATIVA:
-            st.error("Sem conexão!")
+        if "Erro" in STATUS_CONEXAO:
+            st.error("Sem conexão com a planilha.")
         elif not texto and not foto:
             st.warning("Digite algo!")
         else:
@@ -132,9 +137,10 @@ with aba1:
             })
             
             try:
-                df_atual = conn.read(worksheet=ABA_ATIVA, ttl="0")
+                # Lê e Salva usando Index 0 (Primeira Aba)
+                df_atual = conn.read(worksheet=0, ttl="0")
                 df_final = pd.concat([df_atual, pd.DataFrame([nova])], ignore_index=True)
-                conn.update(worksheet=ABA_ATIVA, data=df_final)
+                conn.update(worksheet=0, data=df_final)
                 st.balloons()
                 st.success("Salvo com Sucesso!")
             except Exception as e:
