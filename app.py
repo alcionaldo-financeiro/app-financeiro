@@ -19,28 +19,26 @@ COLUNAS_OFICIAIS = [
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- SISTEMA DE CONEXÃO BLINDADO ---
+# --- SISTEMA DE CONEXÃO TURBO ---
 def conectar_banco():
-    # Tenta conectar na força bruta nas abas mais comuns
-    lista_tentativas = ["Lancamentos", "Página1", "Pagina1", "Sheet1"]
+    # Agora inclui o nome exato da sua aba!
+    lista_tentativas = ["Dados_Motoristas_SaaS", "Lancamentos", "Página1", "Pagina1", "Sheet1"]
     
     for aba in lista_tentativas:
         try:
-            # Tenta ler. Se conseguir, bingo!
             df = conn.read(worksheet=aba, ttl="0")
-            # Se estiver vazia, cria o cabeçalho
+            # Verifica se tem cabeçalho valido
             if df is None or df.empty or len(df.columns) < 2:
+                # Se estiver vazia, cria
                 df_novo = pd.DataFrame(columns=COLUNAS_OFICIAIS)
                 conn.update(worksheet=aba, data=df_novo)
                 return df_novo, aba
             return df, aba
         except:
-            continue # Se der erro, tenta a próxima aba da lista
+            continue 
             
-    # Se nada funcionar, devolve erro mas não trava o app
     return pd.DataFrame(columns=COLUNAS_OFICIAIS), "Erro de Permissão"
 
-# Carrega os dados (Tenta achar a porta aberta)
 df_geral, ABA_ATIVA = conectar_banco()
 
 # --- LOGIN ---
@@ -61,7 +59,6 @@ if not st.session_state['autenticado']:
 # --- DADOS DO USUÁRIO ---
 NOME_USUARIO = st.session_state['usuario']
 
-# Garante que as colunas numéricas são números
 try:
     cols_num = ['Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos', 'KM_Final']
     if not df_geral.empty:
@@ -96,7 +93,7 @@ def processar_texto(frase):
             res['Detalhes'].append(f"{item}")
     return res
 
-# --- TELA PRINCIPAL ---
+# --- TELA ---
 st.sidebar.markdown(f"## 🚘 {NOME_USUARIO.capitalize()}")
 if st.sidebar.button("Sair"):
     st.session_state['autenticado'] = False
@@ -106,22 +103,22 @@ aba1, aba2 = st.tabs(["📝 Lançar", "💰 Extrato"])
 
 with aba1:
     if "Erro" in ABA_ATIVA:
-        st.error("🚨 ATENÇÃO: O Robô não conseguiu entrar na planilha!")
-        st.info("👉 Vá na sua planilha do Google -> Compartilhar -> Cole este email: motorista-saas@perfect-science-486000-n7.iam.gserviceaccount.com")
+        st.error("🚨 ATENÇÃO: O Robô não achou a aba 'Dados_Motoristas_SaaS' ou 'Lancamentos'.")
+        st.info("Verifique se o email motorista-saas... é Editor na planilha.")
     else:
         st.success(f"✅ Conectado na aba: **{ABA_ATIVA}**")
         
     texto = st.text_area("O que rolou?", placeholder="Ex: urbano 200, boraali 50")
-    foto = st.file_uploader("Foto KM (Opcional)", type=['png', 'jpg', 'jpeg'])
+    foto = st.file_uploader("Foto KM", type=['png', 'jpg', 'jpeg'])
     
     if st.button("GRAVAR 🚀", use_container_width=True):
         if "Erro" in ABA_ATIVA:
-            st.error("Não posso salvar sem permissão na planilha!")
+            st.error("Sem conexão!")
         elif not texto and not foto:
             st.warning("Digite algo!")
         else:
             dados = processar_texto(texto)
-            km_lido = 0 # (Lógica de OCR simplificada aqui para não ocupar espaço)
+            km_lido = 0
             
             nova = {col: 0 for col in COLUNAS_OFICIAIS}
             nova.update({
@@ -139,7 +136,7 @@ with aba1:
                 df_final = pd.concat([df_atual, pd.DataFrame([nova])], ignore_index=True)
                 conn.update(worksheet=ABA_ATIVA, data=df_final)
                 st.balloons()
-                st.success("Salvo!")
+                st.success("Salvo com Sucesso!")
             except Exception as e:
                 st.error(f"Erro ao salvar: {e}")
 
@@ -153,5 +150,5 @@ with aba2:
         c3.metric("Lucro", f"R$ {g-d:,.2f}")
         st.dataframe(df_usuario.tail(5))
     else:
-        st.info("Sem dados ainda.")
+        st.info("Sem dados.")
 
