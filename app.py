@@ -8,25 +8,49 @@ import time
 # --- 1. CONFIGURAÇÃO VISUAL ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS NUCLEAR (Visual Limpo) ---
+# --- CSS NUCLEAR (CORES INTELIGENTES) ---
 st.markdown("""
     <style>
+    /* Limpeza Geral */
     #MainMenu, footer, header {visibility: hidden; display: none !important;}
     [data-testid="stToolbar"] {visibility: hidden; display: none !important;}
     .stDeployButton {display: none; visibility: hidden;}
     .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important;}
     
-    div.stButton > button:first-child {
-        border-radius: 12px; height: 3.5em; font-weight: bold; font-size: 18px !important;
-        box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+    /* 1. BOTÕES DE AÇÃO PRINCIPAL (SALVAR/CONFIRMAR) -> VERDE */
+    div.stButton > button[kind="primary"] {
+        background-color: #28a745 !important; /* Verde Sucesso */
+        border-color: #28a745 !important;
+        color: white !important;
+        border-radius: 12px; 
+        height: 3.5em; 
+        font-weight: bold; 
+        font-size: 18px !important;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.2);
     }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #218838 !important; /* Verde mais escuro no mouse */
+    }
+
+    /* 2. BOTÕES DENTRO DE EXPANDERS (LIXEIRA/APAGAR) -> VERMELHO */
+    /* O Streamlit usa a tag <details> para expanders. Tudo que for botão ali dentro vira vermelho */
+    details div.stButton > button {
+        background-color: #dc3545 !important; /* Vermelho Perigo */
+        border-color: #dc3545 !important;
+        color: white !important;
+        font-weight: bold;
+        border-radius: 8px;
+    }
+    details div.stButton > button:hover {
+        background-color: #c82333 !important;
+    }
+
+    /* 3. Ajuste de Inputs Numéricos */
     .stNumberInput input {font-size: 18px; font-weight: bold; text-align: center; padding: 10px;}
     </style>
     """, unsafe_allow_html=True)
 
 # --- CONEXÃO E COLUNAS ---
-# Adicionei KM_Inicial na lista oficial para ficar registrado se quiser no futuro, 
-# mas o calculo principal é feito na hora.
 COLUNAS_OFICIAIS = [
     'ID_Unico', 'Status', 'Usuario', 'Data', 
     'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
@@ -64,6 +88,7 @@ if not st.session_state['autenticado']:
     st.title("💎 BYD Pro")
     usuario = st.text_input("Nome do Motorista:", placeholder="Digite aqui...").strip().lower()
     st.write("")
+    # Este botão é Primary -> Vai ficar VERDE
     if st.button("ACESSAR SISTEMA 🚀", type="primary", use_container_width=True):
         if usuario:
             st.session_state['usuario'] = usuario
@@ -107,7 +132,6 @@ with aba_lanc:
     if not st.session_state['em_conferencia']:
         st.info("Preencha apenas o que teve no dia:")
         
-        # 1. GANHOS (Fechado)
         with st.expander("💰 RECEITAS (GANHOS)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
@@ -117,7 +141,6 @@ with aba_lanc:
                 v_163 = st.number_input("App 163", min_value=0.0, step=10.0, key="in_163")
                 v_outros = st.number_input("Particular / Outros", min_value=0.0, step=10.0, key="in_outros")
 
-        # 2. DESPESAS (Fechado)
         with st.expander("💸 DESPESAS (GASTOS)", expanded=False):
             c3, c4 = st.columns(2)
             with c3:
@@ -129,35 +152,26 @@ with aba_lanc:
                 v_seguro = st.number_input("Seguro", min_value=0.0, step=10.0, key="in_seguro")
                 v_custos = st.number_input("Outros Custos", min_value=0.0, step=10.0, key="in_custos")
 
-        # 3. HODÔMETRO (Aberto e Inteligente)
+        # HODÔMETRO INTELIGENTE
         st.write("🚗 **Hodômetro**")
-        
-        # LÓGICA DE PUXAR O ÚLTIMO KM
-        ultimo_km_registrado = 0
+        ultimo_km = 0
         if not df_usuario.empty:
-            # Ordena por Data e depois ID (descrescente) para pegar o mais recente
             try:
-                df_sorted = df_usuario.sort_values(by=['Data', 'ID_Unico'], ascending=False)
-                ultimo_km_registrado = int(df_sorted.iloc[0]['KM_Final'])
-            except:
-                ultimo_km_registrado = 0
+                # Pega o maior KM já registrado para sugerir
+                ultimo_km = int(df_usuario['KM_Final'].max())
+            except: pass
 
         c_km1, c_km2 = st.columns(2)
         with c_km1:
-            # Traz o último KM como padrão
-            v_km_ini = st.number_input("KM Inicial (Início do dia)", min_value=0, step=1, value=ultimo_km_registrado, format="%d", key="in_km_ini")
+            v_km_ini = st.number_input("KM Inicial", min_value=0, step=1, value=ultimo_km, format="%d", key="in_km_ini")
         with c_km2:
-            v_km_fim = st.number_input("KM Final (Agora)", min_value=0, step=1, format="%d", key="in_km_fim")
+            v_km_fim = st.number_input("KM Final", min_value=0, step=1, format="%d", key="in_km_fim")
         
-        # Mostra quanto rodou
-        km_rodado_hoje = 0
         if v_km_fim > v_km_ini:
-            km_rodado_hoje = v_km_fim - v_km_ini
-            st.caption(f"🛣️ Você rodou **{km_rodado_hoje} KM** hoje.")
+            st.caption(f"🛣️ Rodagem do dia: **{v_km_fim - v_km_ini} KM**")
         
-        obs = st.text_input("Observação (Opcional):", placeholder="Ex: Troca de óleo...")
+        obs = st.text_input("Observação (Opcional):", placeholder="Ex: Pneu furou...")
 
-        # CÁLCULO DE LUCRO
         t_receita = v_urbano + v_bora + v_163 + v_outros
         t_despesa = v_energia + v_alimentacao + v_manut + v_app + v_custos + v_seguro
         t_lucro = t_receita - t_despesa
@@ -169,11 +183,12 @@ with aba_lanc:
         col_l3.metric("Lucro", f"R$ {t_lucro:.2f}", delta_color="normal")
 
         st.write("")
+        # Botão Primary -> VERDE
         if st.button("AVANÇAR PARA CONFERÊNCIA ➡️", type="primary", use_container_width=True):
             if t_receita == 0 and t_despesa == 0 and v_km_fim == 0:
                 st.warning("⚠️ Tudo zerado?")
             elif v_km_fim > 0 and v_km_fim < v_km_ini:
-                st.error("⚠️ O KM Final não pode ser menor que o Inicial!")
+                st.error("⚠️ KM Final menor que Inicial!")
             else:
                 st.session_state['dados_temp'] = {
                     'Urbano': v_urbano, 'Boraali': v_bora, 'app163': v_163, 'Outros_Receita': v_outros,
@@ -192,22 +207,19 @@ with aba_lanc:
         c_res1, c_res2 = st.columns(2)
         total_ganhos = d['Urbano'] + d['Boraali'] + d['app163'] + d['Outros_Receita']
         total_gastos = d['Energia'] + d['Alimentacao'] + d['Manuten'] + d['Aplicativo'] + d['Outros_Custos'] + d['Seguro']
-        km_dia = d['KM_Final'] - d['KM_Inicial']
         
         with c_res1: st.success(f"💰 Receita: R$ {total_ganhos:,.2f}")
         with c_res2: st.error(f"💸 Despesa: R$ {total_gastos:,.2f}")
             
         st.metric("LUCRO FINAL", f"R$ {total_ganhos - total_gastos:,.2f}")
         
-        # Resumo do KM
-        if km_dia > 0:
-            st.info(f"🛣️ Rodagem: {d['KM_Inicial']} ➝ {d['KM_Final']} (**{km_dia} KM**)")
-        
         col_voltar, col_salvar = st.columns([1, 2])
+        # Botão Padrão (Secondary) -> Fica Cinza/Branco (Neutro)
         if col_voltar.button("✏️ Editar"):
             st.session_state['em_conferencia'] = False
             st.rerun()
             
+        # Botão Primary -> VERDE
         if col_salvar.button("✅ CONFIRMAR AGORA", type="primary", use_container_width=True):
             id_novo = str(int(time.time()))
             
@@ -250,24 +262,23 @@ with aba_extrato:
         df_show['Custo_Total'] = df_show['Energia'] + df_show['Manuten'] + df_show['Seguro'] + df_show['Aplicativo'] + df_show['Alimentacao'] + df_show['Outros_Custos']
         df_show['Lucro'] = df_show['Receita_Total'] - df_show['Custo_Total']
         
-        # Calcula KM Rodado por lançamento (segurança caso KM_Inicial esteja vazio)
         df_show['KM_Rodado'] = df_show['KM_Final'] - df_show['KM_Inicial']
-        # Se der negativo ou zero (erro de lançamento), assume 0 para não quebrar a conta
         df_show['KM_Rodado'] = df_show['KM_Rodado'].apply(lambda x: x if x > 0 else 0)
 
         if "Dia a Dia" in tipo_visao:
             st.caption("Lista de lançamentos recentes.")
-            # Mostra KM Inicial e Final no detalhe
             cols = ['Data', 'Receita_Total', 'Custo_Total', 'Lucro', 'KM_Inicial', 'KM_Final', 'Detalhes']
             st.dataframe(df_show[cols].sort_values('Data', ascending=False), use_container_width=True, hide_index=True)
             
             st.divider()
-            with st.expander("🗑️ Excluir Lançamento"):
+            # Botão dentro do Expander vai ficar VERMELHO automaticamente pelo CSS
+            with st.expander("🗑️ Excluir Lançamento (Lixeira)"):
                 lista = df_show.sort_values('Data', ascending=False).head(20).to_dict('records')
                 if lista:
                     opts = {f"{r['Data'].strftime('%d/%m')} | R$ {r['Receita_Total']:.0f} (ID {r['ID_Unico']})": str(r['ID_Unico']) for r in lista}
                     sel = st.selectbox("Selecione o item:", list(opts.keys()))
-                    if st.button("🗑️ Apagar Item"):
+                    
+                    if st.button("🗑️ APAGAR ITEM PERMANENTEMENTE"):
                         try:
                             df_full = conn.read(worksheet=0, ttl="0")
                             df_full['ID_Unico'] = df_full['ID_Unico'].astype(str)
@@ -283,9 +294,7 @@ with aba_extrato:
             if "Mensal" in tipo_visao: df_show['Periodo'] = df_show['Data'].dt.to_period('M').astype(str)
             else: df_show['Periodo'] = df_show['Data'].dt.to_period('Y').astype(str)
             
-            # Agrupa e soma (agora soma o KM Rodado calculado linha a linha)
             resumo = df_show.groupby('Periodo')[['Receita_Total', 'Custo_Total', 'Lucro', 'KM_Rodado']].sum().reset_index()
-            
             resumo['R$/KM'] = resumo.apply(lambda x: x['Receita_Total'] / x['KM_Rodado'] if x['KM_Rodado'] > 0 else 0, axis=1)
             resumo['Custo/KM'] = resumo.apply(lambda x: x['Custo_Total'] / x['KM_Rodado'] if x['KM_Rodado'] > 0 else 0, axis=1)
             resumo['Lucro/KM'] = resumo.apply(lambda x: x['Lucro'] / x['KM_Rodado'] if x['KM_Rodado'] > 0 else 0, axis=1)
