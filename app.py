@@ -1,8 +1,6 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import PIL.Image as PILImage
-import pytesseract
 import re
 from datetime import datetime
 import time
@@ -10,7 +8,7 @@ import time
 # --- 1. CONFIGURAÇÃO VISUAL ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS NUCLEAR (Visual Limpo) ---
+# --- CSS NUCLEAR (Visual Limpo e Botões Grandes) ---
 st.markdown("""
     <style>
     #MainMenu, footer, header {visibility: hidden; display: none !important;}
@@ -18,19 +16,15 @@ st.markdown("""
     .stDeployButton {display: none; visibility: hidden;}
     .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important;}
     
-    /* Botões Grandes e Estilosos */
     div.stButton > button:first-child {
         border-radius: 12px; height: 3.5em; font-weight: bold; font-size: 18px !important;
         box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
     }
+    .stNumberInput input {font-size: 18px; font-weight: bold; text-align: center; padding: 10px;}
     
-    /* Ajuste dos Inputs Numéricos para Mobile */
-    .stNumberInput input {
-        font-size: 18px;
-        font-weight: bold;
-        text-align: center; 
-        padding: 10px;
-    }
+    /* Cores para Lucro/Prejuízo */
+    .lucro-positivo {color: #00CC66; font-weight: bold;}
+    .lucro-negativo {color: #FF4B4B; font-weight: bold;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -46,25 +40,22 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def conectar_banco():
     try:
         df = conn.read(worksheet=0, ttl="0")
-        
-        # Cria planilha se vazia
         if df is None or df.empty or len(df.columns) < 2:
             df_novo = pd.DataFrame(columns=COLUNAS_OFICIAIS)
             conn.update(worksheet=0, data=df_novo)
             return df_novo, "Online"
         
-        # Cria colunas novas se faltar
-        mudou_algo = False
+        # Garante colunas novas e ID
+        mudou = False
         for col in COLUNAS_OFICIAIS:
             if col not in df.columns:
                 df[col] = 0 if col not in ['Usuario', 'Data', 'Detalhes', 'Status'] else ''
-                if col == 'Status': df['Status'] = 'Ativo'
-                if col == 'ID_Unico': df['ID_Unico'] = range(1, len(df) + 1)
-                mudou_algo = True
+                mudou = True
         
-        if mudou_algo:
-            conn.update(worksheet=0, data=df)
-            
+        # Garante que ID seja string para evitar erro de comparação
+        df['ID_Unico'] = df['ID_Unico'].astype(str)
+        
+        if mudou: conn.update(worksheet=0, data=df)
         return df, "Online"
     except:
         return pd.DataFrame(columns=COLUNAS_OFICIAIS), "Offline"
@@ -88,8 +79,10 @@ if not st.session_state['autenticado']:
 # --- DADOS ---
 NOME_USUARIO = st.session_state['usuario']
 try:
-    numeric_cols = [c for c in COLUNAS_OFICIAIS if c not in ['Usuario', 'Data', 'Detalhes', 'Status']]
+    numeric_cols = [c for c in COLUNAS_OFICIAIS if c not in ['ID_Unico', 'Usuario', 'Data', 'Detalhes', 'Status']]
     if not df_geral.empty:
+        # Força conversão de ID para string
+        df_geral['ID_Unico'] = df_geral['ID_Unico'].astype(str)
         for col in numeric_cols:
             if col in df_geral.columns:
                 df_geral[col] = pd.to_numeric(df_geral[col], errors='coerce').fillna(0)
@@ -99,6 +92,8 @@ try:
             (df_geral['Usuario'] == NOME_USUARIO) & 
             (df_geral['Status'] != 'Lixeira')
         ].copy()
+        # Converte Data para datetime para poder filtrar
+        df_usuario['Data'] = pd.to_datetime(df_usuario['Data'], errors='coerce')
     else:
         df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
 except:
@@ -109,153 +104,111 @@ c_logo, c_nome = st.columns([1, 5])
 with c_logo: st.markdown("## 🚘")
 with c_nome: st.markdown(f"### Olá, {NOME_USUARIO.capitalize()}")
 
-aba_lanc, aba_extrato = st.tabs(["📝 LANÇAR", "📊 EXTRATO"])
+aba_lanc, aba_extrato = st.tabs(["📝 LANÇAR", "📊 RELATÓRIOS"])
 
-# === ABA 1: LANÇAMENTO (FORMATO NOVO - PAINEL DE CONTROLE) ===
+# === ABA 1: LANÇAMENTO ===
 with aba_lanc:
     if 'em_conferencia' not in st.session_state: st.session_state['em_conferencia'] = False
     
-    # --- TELA 1: PREENCHIMENTO RÁPIDO ---
+    # --- TELA 1: INPUT ---
     if not st.session_state['em_conferencia']:
         st.info("Preencha apenas o que teve no dia:")
         
-        # GRUPO 1: GANHOS (Expandido por padrão)
         with st.expander("💰 RECEITAS (GANHOS)", expanded=True):
             c1, c2 = st.columns(2)
             with c1:
-                v_urbano = st.number_input("Urbano / 99 / InDrive", min_value=0.0, step=10.0, key="in_urbano")
+                v_urbano = st.number_input("Urbano / 99", min_value=0.0, step=10.0, key="in_urbano")
                 v_bora = st.number_input("BoraAli", min_value=0.0, step=10.0, key="in_bora")
             with c2:
                 v_163 = st.number_input("App 163", min_value=0.0, step=10.0, key="in_163")
                 v_outros = st.number_input("Particular / Outros", min_value=0.0, step=10.0, key="in_outros")
 
-        # GRUPO 2: DESPESAS (Recolhido para limpar a tela)
-        with st.expander("💸 DESPESAS (GASTOS)", expanded=False):
+        with st.expander("💸 DESPESAS (GASTOS)", expanded=True):
             c3, c4 = st.columns(2)
             with c3:
                 v_energia = st.number_input("Energia / Combustível", min_value=0.0, step=10.0, key="in_energia")
                 v_alimentacao = st.number_input("Alimentação / Lanche", min_value=0.0, step=10.0, key="in_alime")
                 v_manut = st.number_input("Manutenção / Lavagem", min_value=0.0, step=10.0, key="in_manut")
             with c4:
-                v_app = st.number_input("Mensalidades (Apps/Net)", min_value=0.0, step=10.0, key="in_app")
-                v_custos = st.number_input("Outros Custos", min_value=0.0, step=10.0, key="in_custos")
+                v_app = st.number_input("Apps / Internet", min_value=0.0, step=10.0, key="in_app")
                 v_seguro = st.number_input("Seguro", min_value=0.0, step=10.0, key="in_seguro")
+                v_custos = st.number_input("Outros Custos", min_value=0.0, step=10.0, key="in_custos")
 
-        # GRUPO 3: KM e OBS
-        with st.expander("🚗 HODÔMETRO & FOTO", expanded=True):
-            st.write("Dica: Digite o KM ou tire a foto para eu tentar ler.")
-            v_km_manual = st.number_input("KM Final (Painel)", min_value=0, step=1, format="%d", key="in_km")
-            
-            tipo_foto = st.radio("Foto (Opcional):", ["Galeria 📂", "Câmera 📷"], horizontal=True, label_visibility="collapsed")
-            foto = None
-            if tipo_foto == "Câmera 📷":
-                col_esq, col_meio, col_dir = st.columns([1, 4, 1])
-                with col_meio: foto = st.camera_input("Tirar Foto")
-            else:
-                foto = st.file_uploader("Carregar Arquivo", type=['png', 'jpg', 'jpeg'])
-                
-            obs = st.text_input("Observação (Opcional):", placeholder="Ex: Pneu furou, Gorjeta...")
+        # KM Manual (Sem foto)
+        st.write("🚗 **Hodômetro**")
+        v_km_manual = st.number_input("KM Final do Painel:", min_value=0, step=1, format="%d", key="in_km")
+        obs = st.text_input("Observação (Opcional):", placeholder="Ex: Pneu furou...")
+
+        # CÁLCULO DE LUCRO EM TEMPO REAL
+        t_receita = v_urbano + v_bora + v_163 + v_outros
+        t_despesa = v_energia + v_alimentacao + v_manut + v_app + v_custos + v_seguro
+        t_lucro = t_receita - t_despesa
+        
+        # Mostra o Lucro Antes de Salvar
+        st.divider()
+        col_l1, col_l2, col_l3 = st.columns(3)
+        col_l1.metric("Receita Hoje", f"R$ {t_receita:.2f}")
+        col_l2.metric("Despesa Hoje", f"R$ {t_despesa:.2f}")
+        col_l3.metric("Lucro Líquido", f"R$ {t_lucro:.2f}", delta_color="normal")
 
         st.write("")
-        # Botão Grande
         if st.button("AVANÇAR PARA CONFERÊNCIA ➡️", type="primary", use_container_width=True):
-            # Validação básica: Tem que ter pelo menos um valor ou foto
-            soma_tudo = v_urbano + v_bora + v_163 + v_outros + v_energia + v_alimentacao + v_manut + v_app + v_custos + v_seguro
-            
-            if soma_tudo == 0 and v_km_manual == 0 and foto is None:
-                st.warning("⚠️ Você não preencheu nada!")
+            if t_receita == 0 and t_despesa == 0 and v_km_manual == 0:
+                st.warning("⚠️ Tudo zerado? Preencha algo.")
             else:
-                # Se tiver foto e o KM for 0, tenta ler o OCR
-                km_final_processado = v_km_manual
-                if foto and km_final_processado == 0:
-                    with st.spinner("Lendo foto..."):
-                        try:
-                            img = PILImage.open(foto)
-                            txt_img = pytesseract.image_to_string(img)
-                            nums = re.findall(r'\d+', txt_img.replace('.', '').replace(',', ''))
-                            # Filtro inteligente
-                            validos = [int(n) for n in nums if 500 < int(n) < 500000]
-                            if validos: 
-                                km_final_processado = max(validos)
-                                st.toast(f"Li na foto: {km_final_processado} KM")
-                        except: pass
-
-                # Salva no estado temporário
                 st.session_state['dados_temp'] = {
                     'Urbano': v_urbano, 'Boraali': v_bora, 'app163': v_163, 'Outros_Receita': v_outros,
                     'Energia': v_energia, 'Alimentacao': v_alimentacao, 'Manuten': v_manut,
                     'Aplicativo': v_app, 'Outros_Custos': v_custos, 'Seguro': v_seguro,
-                    'KM_Final': km_final_processado,
-                    'Detalhes': obs
+                    'KM_Final': v_km_manual, 'Detalhes': obs
                 }
                 st.session_state['em_conferencia'] = True
                 st.rerun()
 
-    # --- TELA 2: CONFERÊNCIA FINAL ---
+    # --- TELA 2: CONFERÊNCIA ---
     else:
         d = st.session_state['dados_temp']
-        st.markdown("### 📝 Resumo do Lançamento")
-        st.caption("Confira os valores antes de salvar.")
+        st.markdown("### 📝 Confirmar Lançamento?")
         
-        # Mostra de forma bonita e resumida
         c_res1, c_res2 = st.columns(2)
-        
-        # Calcula totais para mostrar
         total_ganhos = d['Urbano'] + d['Boraali'] + d['app163'] + d['Outros_Receita']
         total_gastos = d['Energia'] + d['Alimentacao'] + d['Manuten'] + d['Aplicativo'] + d['Outros_Custos'] + d['Seguro']
         
         with c_res1:
-            st.metric("Total Ganhos", f"R$ {total_ganhos:,.2f}")
-            if d['Urbano'] > 0: st.write(f"• Urbano: {d['Urbano']}")
-            if d['Boraali'] > 0: st.write(f"• BoraAli: {d['Boraali']}")
-            if d['app163'] > 0: st.write(f"• 163: {d['app163']}")
-            if d['Outros_Receita'] > 0: st.write(f"• Outros: {d['Outros_Receita']}")
-            
+            st.success(f"💰 Receita: R$ {total_ganhos:,.2f}")
         with c_res2:
-            st.metric("Total Gastos", f"R$ {total_gastos:,.2f}")
-            if d['Energia'] > 0: st.write(f"• Energia: {d['Energia']}")
-            if d['Alimentacao'] > 0: st.write(f"• Comida: {d['Alimentacao']}")
-            if d['Manuten'] > 0: st.write(f"• Manut: {d['Manuten']}")
-            if (d['Aplicativo'] + d['Outros_Custos'] + d['Seguro']) > 0: st.write(f"• Div: {d['Aplicativo'] + d['Outros_Custos'] + d['Seguro']}")
-
-        st.divider()
-        st.write(f"🚗 **KM Final:** {d['KM_Final']}")
-        if d['Detalhes']: st.write(f"📝 **Obs:** {d['Detalhes']}")
+            st.error(f"💸 Despesa: R$ {total_gastos:,.2f}")
+            
+        st.metric("LUCRO FINAL", f"R$ {total_ganhos - total_gastos:,.2f}")
         
         col_voltar, col_salvar = st.columns([1, 2])
-        
         if col_voltar.button("✏️ Editar"):
             st.session_state['em_conferencia'] = False
             st.rerun()
             
-        if col_salvar.button("✅ CONFIRMAR LANÇAMENTO", type="primary", use_container_width=True):
-            id_novo = int(time.time())
+        if col_salvar.button("✅ CONFIRMAR AGORA", type="primary", use_container_width=True):
+            # Gera ID Único como string (timestamp)
+            id_novo = str(int(time.time()))
             
             nova = {col: 0 for col in COLUNAS_OFICIAIS}
             nova.update({
                 'ID_Unico': id_novo, 'Status': 'Ativo',
                 'Usuario': NOME_USUARIO, 'Data': datetime.now().strftime("%Y-%m-%d"),
-                # Mapeia direto do dicionário temporário
                 'Urbano': d['Urbano'], 'Boraali': d['Boraali'], 'app163': d['app163'], 'Outros_Receita': d['Outros_Receita'],
                 'Energia': d['Energia'], 'Manuten': d['Manuten'], 'Seguro': d['Seguro'], 'Aplicativo': d['Aplicativo'],
                 'Alimentacao': d['Alimentacao'], 'Outros_Custos': d['Outros_Custos'], 
                 'KM_Final': d['KM_Final'], 'Detalhes': d['Detalhes']
             })
             
-            # Retry system
             sucesso = False
             my_bar = st.progress(0, text="Salvando...")
-            for tentativa in range(3):
+            for i in range(3):
                 try:
                     df_atual = conn.read(worksheet=0, ttl="0")
                     df_final = pd.concat([df_atual, pd.DataFrame([nova])], ignore_index=True)
                     conn.update(worksheet=0, data=df_final)
-                    sucesso = True
-                    my_bar.progress(100, text="Salvo!")
-                    break 
-                except:
-                    time.sleep(1)
-                    my_bar.progress(33*(tentativa+1), text=f"Reconectando... ({tentativa+1}/3)")
+                    sucesso = True; break
+                except: time.sleep(1)
             my_bar.empty()
             
             if sucesso:
@@ -263,48 +216,96 @@ with aba_lanc:
                 st.toast("Sucesso!", icon="✅")
                 time.sleep(1)
                 st.session_state['em_conferencia'] = False
-                # Limpa os campos forçando rerun
                 st.rerun()
-            else:
-                st.error("Erro ao salvar. Tente novamente.")
+            else: st.error("Erro ao salvar. Tente de novo.")
 
-# === ABA 2: EXTRATO ===
+# === ABA 2: RELATÓRIOS (PERFEITO) ===
 with aba_extrato:
     if not df_usuario.empty:
-        g = df_usuario[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().sum()
-        d = df_usuario[['Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos']].sum().sum()
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Ganhos", f"R$ {g:,.0f}")
-        c2.metric("Gastos", f"R$ {d:,.0f}")
-        c3.metric("Lucro", f"R$ {g-d:,.0f}")
+        # --- FILTRO DE DATA ---
+        tipo_visao = st.radio("Visualizar:", ["📅 Dia a Dia (Detalhado)", "🗓️ Mensal (Gestão)", "📆 Anual"], horizontal=True)
         
-        st.write("---")
-        st.caption("📋 Extrato Simplificado")
+        df_show = df_usuario.copy()
         
-        # Filtra colunas com valores
-        cols_ver = ['Data', 'Urbano', 'Boraali', 'Energia', 'Alimentacao', 'Manuten', 'KM_Final']
-        # Adiciona colunas extras se tiverem valor
-        for extra in ['app163', 'Outros_Receita', 'Aplicativo', 'Outros_Custos', 'Seguro']:
-             if df_usuario[extra].sum() > 0: cols_ver.append(extra)
+        # --- CÁLCULOS GERAIS ---
+        df_show['Receita_Total'] = df_show['Urbano'] + df_show['Boraali'] + df_show['app163'] + df_show['Outros_Receita']
+        df_show['Custo_Total'] = df_show['Energia'] + df_show['Manuten'] + df_show['Seguro'] + df_show['Aplicativo'] + df_show['Alimentacao'] + df_show['Outros_Custos']
+        df_show['Lucro'] = df_show['Receita_Total'] - df_show['Custo_Total']
         
-        cols_finais = [c for c in cols_ver if c in df_usuario.columns]
-        st.dataframe(df_usuario[cols_finais].iloc[::-1].head(15), use_container_width=True, hide_index=True)
+        # --- LÓGICA DE EXIBIÇÃO ---
+        
+        if "Dia a Dia" in tipo_visao:
+            # Visão detalhada (igual antes, mas com colunas calculadas)
+            st.caption("Lista de todos os lançamentos para conferência.")
+            cols = ['Data', 'Receita_Total', 'Custo_Total', 'Lucro', 'Energia', 'Alimentacao', 'KM_Final', 'Detalhes']
+            st.dataframe(df_show[cols].sort_values('Data', ascending=False), use_container_width=True, hide_index=True)
+            
+            # --- LIXEIRA (SÓ APARECE NO MODO DETALHADO) ---
+            st.divider()
+            with st.expander("🗑️ Excluir Lançamento"):
+                # Lista últimos 20 itens para apagar
+                lista = df_show.sort_values('Data', ascending=False).head(20).to_dict('records')
+                if lista:
+                    # Cria dicionário ID -> Texto Legível
+                    opts = {f"{r['Data'].strftime('%d/%m')} | R$ {r['Receita_Total']:.0f} (ID {r['ID_Unico']})": str(r['ID_Unico']) for r in lista}
+                    sel = st.selectbox("Selecione o item:", list(opts.keys()))
+                    
+                    if st.button("🗑️ Apagar Item"):
+                        try:
+                            df_full = conn.read(worksheet=0, ttl="0")
+                            # Converte coluna ID para string para garantir match
+                            df_full['ID_Unico'] = df_full['ID_Unico'].astype(str)
+                            id_alvo = opts[sel]
+                            
+                            if id_alvo in df_full['ID_Unico'].values:
+                                df_full.loc[df_full['ID_Unico'] == id_alvo, 'Status'] = 'Lixeira'
+                                conn.update(worksheet=0, data=df_full)
+                                st.success("Apagado com sucesso!")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("Erro: ID não encontrado na planilha (tipagem).")
+                        except Exception as e:
+                            st.error(f"Erro técnico: {e}")
+                else:
+                    st.info("Sem dados recentes.")
 
-        # Lixeira
-        st.write("")
-        with st.expander("🗑️ Lixeira / Correção"):
-            lista = df_usuario.iloc[::-1].head(10).to_dict('records')
-            if lista:
-                opts = {f"{r['Data']} - R$ {r['Urbano']} (ID {r['ID_Unico']})": r['ID_Unico'] for r in lista}
-                sel = st.selectbox("Apagar:", list(opts.keys()))
-                if st.button("Confirmar Exclusão"):
-                    try:
-                        df_full = conn.read(worksheet=0, ttl="0")
-                        df_full.loc[df_full['ID_Unico'] == opts[sel], 'Status'] = 'Lixeira'
-                        conn.update(worksheet=0, data=df_full)
-                        st.success("Apagado!")
-                        time.sleep(1)
-                        st.rerun()
-                    except: st.error("Erro.")
+        else:
+            # --- VISÃO GERENCIAL (MENSAL OU ANUAL) ---
+            # Agrupa os dados
+            if "Mensal" in tipo_visao:
+                df_show['Periodo'] = df_show['Data'].dt.to_period('M').astype(str)
+            else:
+                df_show['Periodo'] = df_show['Data'].dt.to_period('Y').astype(str)
+            
+            # Agregação (Soma tudo)
+            resumo = df_show.groupby('Periodo')[['Receita_Total', 'Custo_Total', 'Lucro', 'KM_Final', 'Energia']].sum().reset_index()
+            
+            # --- CÁLCULOS DE KPI (IGUAL EXCEL) ---
+            # Evita divisão por zero
+            resumo['R$/KM'] = resumo.apply(lambda x: x['Receita_Total'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
+            resumo['Custo/KM'] = resumo.apply(lambda x: x['Custo_Total'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
+            resumo['Lucro/KM'] = resumo.apply(lambda x: x['Lucro'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
+            
+            # Formatação Bonita
+            st.markdown(f"### 📊 Relatório {tipo_visao}")
+            
+            # Mostra Tabela
+            st.dataframe(
+                resumo.sort_values('Periodo', ascending=False),
+                column_config={
+                    "Receita_Total": st.column_config.NumberColumn("Receita", format="R$ %.2f"),
+                    "Custo_Total": st.column_config.NumberColumn("Custos", format="R$ %.2f"),
+                    "Lucro": st.column_config.NumberColumn("Lucro Líquido", format="R$ %.2f"),
+                    "R$/KM": st.column_config.NumberColumn("R$/KM", format="R$ %.2f"),
+                    "Lucro/KM": st.column_config.NumberColumn("Lucro/KM", format="R$ %.2f"),
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Gráfico de Barras Rápido
+            st.bar_chart(resumo.set_index('Periodo')[['Receita_Total', 'Lucro']])
+
     else:
-        st.info("Sem dados.")
+        st.info("Sem dados para exibir.")
