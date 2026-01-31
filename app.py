@@ -18,7 +18,7 @@ if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    st.title("💎 Faturamento Pro - Lucas do Rio Verde")
+    st.title("💎 Faturamento Pro - Gestão de Motoristas")
     usuario = st.text_input("Quem está acessando? (Digite seu nome):").strip().lower()
     if st.button("Entrar no Sistema"):
         if usuario:
@@ -29,32 +29,31 @@ if not st.session_state['autenticado']:
 
 # --- CARREGAR DADOS ---
 NOME_USUARIO = st.session_state['usuario']
+COLUNAS_PADRAO = ['Usuario', 'Data', 'Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos', 'KM_Final']
+
 try:
     df_geral = conn.read(worksheet="Lancamentos", ttl="0")
     if df_geral is None or df_geral.empty:
-        # Cria as colunas se a planilha estiver vazia
-        colunas = ['Usuario', 'Data', 'Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos', 'KM_Final']
-        df_geral = pd.DataFrame(columns=colunas)
+        df_geral = pd.DataFrame(columns=COLUNAS_PADRAO)
     df_usuario = df_geral[df_geral['Usuario'] == NOME_USUARIO].copy()
 except Exception:
-    st.error("⚠️ Erro de conexão com o Banco de Dados. Tente novamente em instantes.")
-    st.stop()
+    # Se falhar a primeira vez (planilha nova), cria estrutura básica
+    df_geral = pd.DataFrame(columns=COLUNAS_PADRAO)
+    df_usuario = pd.DataFrame(columns=COLUNAS_PADRAO)
 
 # --- INTELIGÊNCIA DE LANÇAMENTO ---
 def processar_fala_motorista(frase):
     frase = frase.lower().replace(',', '.')
     res = {'Ganhos': {}, 'Gastos': {}, 'Duvidas': []}
     
-    # Dicionário de busca
     mapa = {
         'urbano': ('Ganhos', 'Urbano'), 'bora': ('Ganhos', 'Boraali'), '163': ('Ganhos', 'app163'),
-        'particula': ('Ganhos', 'Outros_Receita'), 'viagem': ('Ganhos', 'Outros_Receita'),
+        'particula': ('Ganhos', 'Outros_Receita'), 'arroz': ('Ganhos', 'Outros_Receita'),
         'energia': ('Gastos', 'Energia'), 'carga': ('Gastos', 'Energia'), 'gasolina': ('Gastos', 'Energia'),
-        'combust': ('Gastos', 'Energia'), 'manut': ('Gastos', 'Manuten'), 'lavag': ('Gastos', 'Manuten'),
-        'seguro': ('Gastos', 'Seguro'), 'marmita': ('Gastos', 'Outros_Custos'), 'almoço': ('Gastos', 'Outros_Custos')
+        'combust': ('Gastos', 'Energia'), 'manut': ('Gastos', 'Manuten'), 'seguro': ('Gastos', 'Seguro'),
+        'marmita': ('Gastos', 'Outros_Custos'), 'almoço': ('Gastos', 'Outros_Custos')
     }
     
-    # Busca números e palavras
     pedacos = re.findall(r'([a-z1-9á-ú]+)\s*(\d+[\.]?\d*)', frase)
     
     for item, valor_str in pedacos:
@@ -66,7 +65,6 @@ def processar_fala_motorista(frase):
                 identificado = True; break
         
         if not identificado:
-            # Se não entendeu, joga em outros e avisa
             res['Ganhos']['Outros_Receita'] = res['Ganhos'].get('Outros_Receita', 0) + valor
             res['Duvidas'].append(item)
             
@@ -82,18 +80,17 @@ aba1, aba2 = st.tabs(["📥 Novo Lançamento", "📈 Meu Financeiro"])
 
 with aba1:
     st.write("### O que rodamos hoje?")
-    texto_bruto = st.text_area("Descreva seus ganhos e gastos", placeholder="Ex: urbano 150, marmita 35, gasolina 50")
+    texto_bruto = st.text_area("Descreva ganhos e gastos", placeholder="Ex: urbano 150, marmita 35, gasolina 50")
     foto = st.file_uploader("📷 Foto do Painel (KM)", type=['png', 'jpg', 'jpeg'])
     
-    if st.button("🚀 Gravar Dados com Segurança"):
+    if st.button("🚀 Gravar Dados na Nuvem"):
         if not texto_bruto and not foto:
             st.warning("Por favor, digite algo ou envie uma foto.")
         else:
             dados = processar_fala_motorista(texto_bruto)
             
-            # Alerta de dúvida
             if dados['Duvidas']:
-                st.warning(f"⚠️ Atenção: Não reconheci os termos: {', '.join(dados['Duvidas'])}. Lançamos como 'Outros', verifique depois!")
+                st.warning(f"⚠️ Não reconheci: {', '.join(dados['Duvidas'])}. Lançamos em 'Outros', confira no relatório!")
 
             km_lido = 0
             if foto:
@@ -101,40 +98,39 @@ with aba1:
                     txt_img = pytesseract.image_to_string(PILImage.open(foto))
                     nums = [int(n) for n in re.findall(r'\d+', txt_img) if int(n) > 100]
                     if nums: km_lido = max(nums)
-                except: st.error("Não consegui ler o KM da foto automaticamente.")
+                except: st.error("Erro ao ler KM da foto.")
 
-            # Montar a linha
-            nova_linha = {
+            nova_linha = {col: 0 for col in COLUNAS_PADRAO}
+            nova_linha.update({
                 'Usuario': NOME_USUARIO, 'Data': datetime.now().strftime("%Y-%m-%d"),
                 'Urbano': dados['Ganhos'].get('Urbano', 0), 'Boraali': dados['Ganhos'].get('Boraali', 0),
                 'app163': dados['Ganhos'].get('app163', 0), 'Outros_Receita': dados['Ganhos'].get('Outros_Receita', 0),
                 'Energia': dados['Gastos'].get('Energia', 0), 'Manuten': dados['Gastos'].get('Manuten', 0),
                 'Seguro': dados['Gastos'].get('Seguro', 0), 'Aplicativo': dados['Gastos'].get('Aplicativo', 0),
                 'Outros_Custos': dados['Gastos'].get('Outros_Custos', 0), 'KM_Final': km_lido
-            }
+            })
             
-            # Enviar para o Google
             try:
                 df_final = pd.concat([df_geral, pd.DataFrame([nova_linha])], ignore_index=True)
                 conn.update(worksheet="Lancamentos", data=df_final)
-                st.success("✅ Tudo pronto! Dados salvos na nuvem.")
+                st.success("✅ Salvo com sucesso no Google Sheets!")
                 st.balloons()
             except:
-                st.error("❌ Falha crítica ao salvar. Verifique sua conexão.")
+                st.error("❌ Falha ao salvar. Verifique sua conexão.")
 
 with aba2:
     if not df_usuario.empty:
         rec = df_usuario[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().sum()
         gas = df_usuario[['Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos']].sum().sum()
         
-        st.subheader("Resumo do Período")
         c1, c2, c3 = st.columns(3)
         c1.metric("Ganhos", f"R$ {rec:,.2f}")
         c2.metric("Despesas", f"R$ {gas:,.2f}")
         c3.metric("Líquido", f"R$ {rec-gas:,.2f}")
         
         st.write("---")
-        fig = px.bar(df_usuario, x='Data', y=['Urbano', 'Boraali', 'app163', 'Outros_Receita'], title="Seus Ganhos Diários")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(px.bar(df_usuario, x='Data', y=['Urbano', 'Boraali', 'app163', 'Outros_Receita'], title="Seus Ganhos Diários"))
+        st.dataframe(df_usuario.tail(10))
     else:
-        st.info("Ainda não temos dados para exibir gráficos.")
+        st.info("Aguardando seu primeiro lançamento para mostrar os gráficos.")
+
