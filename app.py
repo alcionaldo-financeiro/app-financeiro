@@ -8,7 +8,7 @@ import time
 # --- 1. CONFIGURAÇÃO VISUAL ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS NUCLEAR (Visual Limpo e Botões Grandes) ---
+# --- CSS NUCLEAR (Visual Limpo) ---
 st.markdown("""
     <style>
     #MainMenu, footer, header {visibility: hidden; display: none !important;}
@@ -21,10 +21,6 @@ st.markdown("""
         box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
     }
     .stNumberInput input {font-size: 18px; font-weight: bold; text-align: center; padding: 10px;}
-    
-    /* Cores para Lucro/Prejuízo */
-    .lucro-positivo {color: #00CC66; font-weight: bold;}
-    .lucro-negativo {color: #FF4B4B; font-weight: bold;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -45,16 +41,13 @@ def conectar_banco():
             conn.update(worksheet=0, data=df_novo)
             return df_novo, "Online"
         
-        # Garante colunas novas e ID
         mudou = False
         for col in COLUNAS_OFICIAIS:
             if col not in df.columns:
                 df[col] = 0 if col not in ['Usuario', 'Data', 'Detalhes', 'Status'] else ''
                 mudou = True
         
-        # Garante que ID seja string para evitar erro de comparação
         df['ID_Unico'] = df['ID_Unico'].astype(str)
-        
         if mudou: conn.update(worksheet=0, data=df)
         return df, "Online"
     except:
@@ -81,7 +74,6 @@ NOME_USUARIO = st.session_state['usuario']
 try:
     numeric_cols = [c for c in COLUNAS_OFICIAIS if c not in ['ID_Unico', 'Usuario', 'Data', 'Detalhes', 'Status']]
     if not df_geral.empty:
-        # Força conversão de ID para string
         df_geral['ID_Unico'] = df_geral['ID_Unico'].astype(str)
         for col in numeric_cols:
             if col in df_geral.columns:
@@ -92,7 +84,6 @@ try:
             (df_geral['Usuario'] == NOME_USUARIO) & 
             (df_geral['Status'] != 'Lixeira')
         ].copy()
-        # Converte Data para datetime para poder filtrar
         df_usuario['Data'] = pd.to_datetime(df_usuario['Data'], errors='coerce')
     else:
         df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
@@ -114,7 +105,8 @@ with aba_lanc:
     if not st.session_state['em_conferencia']:
         st.info("Preencha apenas o que teve no dia:")
         
-        with st.expander("💰 RECEITAS (GANHOS)", expanded=True):
+        # AGORA VEM FECHADO (expanded=False)
+        with st.expander("💰 RECEITAS (GANHOS)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
                 v_urbano = st.number_input("Urbano / 99", min_value=0.0, step=10.0, key="in_urbano")
@@ -123,7 +115,8 @@ with aba_lanc:
                 v_163 = st.number_input("App 163", min_value=0.0, step=10.0, key="in_163")
                 v_outros = st.number_input("Particular / Outros", min_value=0.0, step=10.0, key="in_outros")
 
-        with st.expander("💸 DESPESAS (GASTOS)", expanded=True):
+        # AGORA VEM FECHADO (expanded=False)
+        with st.expander("💸 DESPESAS (GASTOS)", expanded=False):
             c3, c4 = st.columns(2)
             with c3:
                 v_energia = st.number_input("Energia / Combustível", min_value=0.0, step=10.0, key="in_energia")
@@ -134,7 +127,7 @@ with aba_lanc:
                 v_seguro = st.number_input("Seguro", min_value=0.0, step=10.0, key="in_seguro")
                 v_custos = st.number_input("Outros Custos", min_value=0.0, step=10.0, key="in_custos")
 
-        # KM Manual (Sem foto)
+        # KM Manual
         st.write("🚗 **Hodômetro**")
         v_km_manual = st.number_input("KM Final do Painel:", min_value=0, step=1, format="%d", key="in_km")
         obs = st.text_input("Observação (Opcional):", placeholder="Ex: Pneu furou...")
@@ -144,7 +137,6 @@ with aba_lanc:
         t_despesa = v_energia + v_alimentacao + v_manut + v_app + v_custos + v_seguro
         t_lucro = t_receita - t_despesa
         
-        # Mostra o Lucro Antes de Salvar
         st.divider()
         col_l1, col_l2, col_l3 = st.columns(3)
         col_l1.metric("Receita Hoje", f"R$ {t_receita:.2f}")
@@ -174,10 +166,8 @@ with aba_lanc:
         total_ganhos = d['Urbano'] + d['Boraali'] + d['app163'] + d['Outros_Receita']
         total_gastos = d['Energia'] + d['Alimentacao'] + d['Manuten'] + d['Aplicativo'] + d['Outros_Custos'] + d['Seguro']
         
-        with c_res1:
-            st.success(f"💰 Receita: R$ {total_ganhos:,.2f}")
-        with c_res2:
-            st.error(f"💸 Despesa: R$ {total_gastos:,.2f}")
+        with c_res1: st.success(f"💰 Receita: R$ {total_ganhos:,.2f}")
+        with c_res2: st.error(f"💸 Despesa: R$ {total_gastos:,.2f}")
             
         st.metric("LUCRO FINAL", f"R$ {total_ganhos - total_gastos:,.2f}")
         
@@ -187,7 +177,6 @@ with aba_lanc:
             st.rerun()
             
         if col_salvar.button("✅ CONFIRMAR AGORA", type="primary", use_container_width=True):
-            # Gera ID Único como string (timestamp)
             id_novo = str(int(time.time()))
             
             nova = {col: 0 for col in COLUNAS_OFICIAIS}
@@ -219,41 +208,31 @@ with aba_lanc:
                 st.rerun()
             else: st.error("Erro ao salvar. Tente de novo.")
 
-# === ABA 2: RELATÓRIOS (PERFEITO) ===
+# === ABA 2: RELATÓRIOS ===
 with aba_extrato:
     if not df_usuario.empty:
-        # --- FILTRO DE DATA ---
         tipo_visao = st.radio("Visualizar:", ["📅 Dia a Dia (Detalhado)", "🗓️ Mensal (Gestão)", "📆 Anual"], horizontal=True)
         
         df_show = df_usuario.copy()
-        
-        # --- CÁLCULOS GERAIS ---
         df_show['Receita_Total'] = df_show['Urbano'] + df_show['Boraali'] + df_show['app163'] + df_show['Outros_Receita']
         df_show['Custo_Total'] = df_show['Energia'] + df_show['Manuten'] + df_show['Seguro'] + df_show['Aplicativo'] + df_show['Alimentacao'] + df_show['Outros_Custos']
         df_show['Lucro'] = df_show['Receita_Total'] - df_show['Custo_Total']
         
-        # --- LÓGICA DE EXIBIÇÃO ---
-        
         if "Dia a Dia" in tipo_visao:
-            # Visão detalhada (igual antes, mas com colunas calculadas)
-            st.caption("Lista de todos os lançamentos para conferência.")
+            st.caption("Lista de lançamentos recentes.")
             cols = ['Data', 'Receita_Total', 'Custo_Total', 'Lucro', 'Energia', 'Alimentacao', 'KM_Final', 'Detalhes']
             st.dataframe(df_show[cols].sort_values('Data', ascending=False), use_container_width=True, hide_index=True)
             
-            # --- LIXEIRA (SÓ APARECE NO MODO DETALHADO) ---
             st.divider()
             with st.expander("🗑️ Excluir Lançamento"):
-                # Lista últimos 20 itens para apagar
                 lista = df_show.sort_values('Data', ascending=False).head(20).to_dict('records')
                 if lista:
-                    # Cria dicionário ID -> Texto Legível
                     opts = {f"{r['Data'].strftime('%d/%m')} | R$ {r['Receita_Total']:.0f} (ID {r['ID_Unico']})": str(r['ID_Unico']) for r in lista}
                     sel = st.selectbox("Selecione o item:", list(opts.keys()))
                     
                     if st.button("🗑️ Apagar Item"):
                         try:
                             df_full = conn.read(worksheet=0, ttl="0")
-                            # Converte coluna ID para string para garantir match
                             df_full['ID_Unico'] = df_full['ID_Unico'].astype(str)
                             id_alvo = opts[sel]
                             
@@ -263,34 +242,20 @@ with aba_extrato:
                                 st.success("Apagado com sucesso!")
                                 time.sleep(1)
                                 st.rerun()
-                            else:
-                                st.error("Erro: ID não encontrado na planilha (tipagem).")
-                        except Exception as e:
-                            st.error(f"Erro técnico: {e}")
-                else:
-                    st.info("Sem dados recentes.")
+                            else: st.error("Erro: ID não encontrado.")
+                        except Exception as e: st.error(f"Erro: {e}")
+                else: st.info("Sem dados recentes.")
 
         else:
-            # --- VISÃO GERENCIAL (MENSAL OU ANUAL) ---
-            # Agrupa os dados
-            if "Mensal" in tipo_visao:
-                df_show['Periodo'] = df_show['Data'].dt.to_period('M').astype(str)
-            else:
-                df_show['Periodo'] = df_show['Data'].dt.to_period('Y').astype(str)
+            if "Mensal" in tipo_visao: df_show['Periodo'] = df_show['Data'].dt.to_period('M').astype(str)
+            else: df_show['Periodo'] = df_show['Data'].dt.to_period('Y').astype(str)
             
-            # Agregação (Soma tudo)
             resumo = df_show.groupby('Periodo')[['Receita_Total', 'Custo_Total', 'Lucro', 'KM_Final', 'Energia']].sum().reset_index()
-            
-            # --- CÁLCULOS DE KPI (IGUAL EXCEL) ---
-            # Evita divisão por zero
             resumo['R$/KM'] = resumo.apply(lambda x: x['Receita_Total'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
             resumo['Custo/KM'] = resumo.apply(lambda x: x['Custo_Total'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
             resumo['Lucro/KM'] = resumo.apply(lambda x: x['Lucro'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
             
-            # Formatação Bonita
             st.markdown(f"### 📊 Relatório {tipo_visao}")
-            
-            # Mostra Tabela
             st.dataframe(
                 resumo.sort_values('Periodo', ascending=False),
                 column_config={
@@ -300,12 +265,7 @@ with aba_extrato:
                     "R$/KM": st.column_config.NumberColumn("R$/KM", format="R$ %.2f"),
                     "Lucro/KM": st.column_config.NumberColumn("Lucro/KM", format="R$ %.2f"),
                 },
-                use_container_width=True,
-                hide_index=True
+                use_container_width=True, hide_index=True
             )
-            
-            # Gráfico de Barras Rápido
             st.bar_chart(resumo.set_index('Periodo')[['Receita_Total', 'Lucro']])
-
-    else:
-        st.info("Sem dados para exibir.")
+    else: st.info("Sem dados para exibir.")
