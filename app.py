@@ -37,7 +37,6 @@ try:
         df_geral = pd.DataFrame(columns=COLUNAS_PADRAO)
     df_usuario = df_geral[df_geral['Usuario'] == NOME_USUARIO].copy()
 except Exception:
-    # Se falhar a primeira vez (planilha nova), cria estrutura básica
     df_geral = pd.DataFrame(columns=COLUNAS_PADRAO)
     df_usuario = pd.DataFrame(columns=COLUNAS_PADRAO)
 
@@ -133,4 +132,3 @@ with aba2:
         st.dataframe(df_usuario.tail(10))
     else:
         st.info("Aguardando seu primeiro lançamento para mostrar os gráficos.")
-
