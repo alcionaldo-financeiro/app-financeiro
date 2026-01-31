@@ -8,16 +8,14 @@ import time
 # --- 1. CONFIGURAÇÃO VISUAL ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS NUCLEAR (CORES + INPUTS LIMPOS) ---
+# --- CSS NUCLEAR ---
 st.markdown("""
     <style>
-    /* Limpeza Geral */
     #MainMenu, footer, header {visibility: hidden; display: none !important;}
     [data-testid="stToolbar"] {visibility: hidden; display: none !important;}
     .stDeployButton {display: none; visibility: hidden;}
     .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important;}
     
-    /* 1. BOTÃO VERDE (ENTRAR / SALVAR) */
     div.stButton > button[kind="primary"] {
         background-color: #28a745 !important; 
         border-color: #28a745 !important;
@@ -26,7 +24,6 @@ st.markdown("""
         box-shadow: 0px 4px 6px rgba(0,0,0,0.2);
     }
     
-    /* 2. BOTÃO VERMELHO (LIXEIRA) */
     details div.stButton > button {
         background-color: #dc3545 !important;
         border-color: #dc3545 !important;
@@ -35,7 +32,6 @@ st.markdown("""
         border-radius: 8px;
     }
 
-    /* 3. INPUTS NUMÉRICOS GIGANTES */
     .stNumberInput input {
         font-size: 20px !important; 
         font-weight: bold; 
@@ -69,18 +65,22 @@ def conectar_banco():
                 mudou = True
         
         df['ID_Unico'] = df['ID_Unico'].astype(str)
+        # Garante que CPF seja lido como string para comparação
+        if 'CPF' in df.columns:
+            df['CPF'] = df['CPF'].astype(str).replace('nan', '')
+            
         if mudou: conn.update(worksheet=0, data=df)
         return df, "Online"
     except:
         return pd.DataFrame(columns=COLUNAS_OFICIAIS), "Offline"
 
+# Carrega dados globais para conferência de login
 df_geral, STATUS = conectar_banco()
 
-# --- HELPER: Limpa valor vazio ---
-def safe_val(val):
-    return val if val is not None else 0.0
+# --- HELPER ---
+def safe_val(val): return val if val is not None else 0.0
 
-# --- TELA DE LOGIN (COM TRAVA DE CPF) ---
+# --- TELA DE LOGIN (COM AUDITORIA DE CPF) ---
 if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
@@ -96,25 +96,46 @@ if not st.session_state['autenticado']:
 
     st.write("")
     if st.button("ACESSAR SISTEMA 🚀", type="primary", use_container_width=True):
-        # 1. Limpa o CPF (tira pontos e traços)
+        # 1. Limpeza
         cpf_limpo = re.sub(r'\D', '', cpf_input)
+        nome_limpo = usuario_input.lower().strip()
         
-        # 2. Validação (Trava Anti-Erro)
-        if not usuario_input:
-            st.warning("⚠️ Favor digitar o Nome.")
-        elif not cpf_limpo:
-            st.warning("⚠️ Favor digitar o CPF.")
+        # 2. Validação Básica
+        if not nome_limpo:
+            st.warning("⚠️ Digite o Nome.")
         elif len(cpf_limpo) != 11:
-            st.warning(f"⚠️ CPF Inválido! O CPF deve ter exatamente 11 dígitos. Você digitou {len(cpf_limpo)}.")
+            st.warning(f"⚠️ CPF Inválido! Digite 11 números. (Digitado: {len(cpf_limpo)})")
         else:
-            # SUCESSO
-            st.session_state['usuario'] = usuario_input.lower()
-            st.session_state['cpf_usuario'] = cpf_limpo
-            st.session_state['autenticado'] = True
-            st.rerun()
+            # 3. AUDITORIA DE IDENTIDADE (CRUZAMENTO DE DADOS)
+            permitido = True
+            
+            if not df_geral.empty and 'CPF' in df_geral.columns:
+                # Filtra se esse CPF já existe na base
+                # Convertendo para string para garantir
+                df_check = df_geral.copy()
+                df_check['CPF'] = df_check['CPF'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
+                
+                usuario_encontrado = df_check[df_check['CPF'] == cpf_limpo]
+                
+                if not usuario_encontrado.empty:
+                    # Pega o primeiro nome registrado para este CPF
+                    nome_registrado = usuario_encontrado.iloc[0]['Usuario'].lower().strip()
+                    
+                    # Se o nome for diferente, BLOQUEIA
+                    if nome_registrado != nome_limpo:
+                        st.error(f"⛔ ERRO DE SEGURANÇA: O CPF {cpf_input} já está registrado para o motorista '{nome_registrado.upper()}'.")
+                        st.warning(f"Você tentou entrar como '{nome_limpo.upper()}'. Verifique seus dados.")
+                        permitido = False
+            
+            # 4. Se passou na auditoria, libera
+            if permitido:
+                st.session_state['usuario'] = nome_limpo
+                st.session_state['cpf_usuario'] = cpf_limpo
+                st.session_state['autenticado'] = True
+                st.rerun()
     st.stop()
 
-# --- DADOS ---
+# --- DADOS DO USUÁRIO LOGADO ---
 NOME_USUARIO = st.session_state['usuario']
 CPF_USUARIO = st.session_state['cpf_usuario']
 
@@ -126,8 +147,9 @@ try:
             if col in df_geral.columns:
                 df_geral[col] = pd.to_numeric(df_geral[col], errors='coerce').fillna(0)
     
-    # Filtra pelo Nome (Poderíamos filtrar pelo CPF também no futuro para ser mais estrito)
-    if 'Usuario' in df_geral.columns and 'Status' in df_geral.columns:
+    # Filtra pelo CPF para garantir unicidade absoluta
+    # Mas como o nome foi validado no login, filtramos por ele para manter padrão visual
+    if 'Usuario' in df_geral.columns:
         df_usuario = df_geral[
             (df_geral['Usuario'] == NOME_USUARIO) & 
             (df_geral['Status'] != 'Lixeira')
@@ -149,11 +171,9 @@ aba_lanc, aba_extrato = st.tabs(["📝 LANÇAR", "📊 RELATÓRIOS"])
 with aba_lanc:
     if 'em_conferencia' not in st.session_state: st.session_state['em_conferencia'] = False
     
-    # --- TELA 1: INPUT ---
     if not st.session_state['em_conferencia']:
         st.info("Preencha apenas o que teve no dia:")
         
-        # Ganhos
         with st.expander("💰 RECEITAS (GANHOS)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
@@ -163,7 +183,6 @@ with aba_lanc:
                 v_163 = st.number_input("App 163", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_163")
                 v_outros = st.number_input("Particular / Outros", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_outros")
 
-        # Despesas
         with st.expander("💸 DESPESAS (GASTOS)", expanded=False):
             c3, c4 = st.columns(2)
             with c3:
@@ -175,7 +194,6 @@ with aba_lanc:
                 v_seguro = st.number_input("Seguro", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_seguro")
                 v_custos = st.number_input("Outros Custos", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_custos")
 
-        # Hodômetro
         st.write("🚗 **Hodômetro**")
         ultimo_km = None 
         if not df_usuario.empty:
