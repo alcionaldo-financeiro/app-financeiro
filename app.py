@@ -26,10 +26,11 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONEXÃO ---
+# --- CONEXÃO E COLUNAS ---
 COLUNAS_OFICIAIS = [
-    'ID_Unico', 'Status', 'Usuario', 'Data', 'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
-    'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos', 
+    'ID_Unico', 'Status', 'Usuario', 'Data', 
+    'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
+    'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 
     'KM_Final', 'Detalhes'
 ]
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -37,14 +38,23 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def conectar_banco():
     try:
         df = conn.read(worksheet=0, ttl="0")
+        
+        # Cria planilha se vazia
         if df is None or df.empty or len(df.columns) < 2:
             df_novo = pd.DataFrame(columns=COLUNAS_OFICIAIS)
             conn.update(worksheet=0, data=df_novo)
             return df_novo, "Online"
         
-        if 'Status' not in df.columns:
-            df['Status'] = 'Ativo'
-            df['ID_Unico'] = range(1, len(df) + 1)
+        # Cria colunas novas se faltar
+        mudou_algo = False
+        for col in COLUNAS_OFICIAIS:
+            if col not in df.columns:
+                df[col] = 0 if col not in ['Usuario', 'Data', 'Detalhes', 'Status'] else ''
+                if col == 'Status': df['Status'] = 'Ativo'
+                if col == 'ID_Unico': df['ID_Unico'] = range(1, len(df) + 1)
+                mudou_algo = True
+        
+        if mudou_algo:
             conn.update(worksheet=0, data=df)
             
         return df, "Online"
@@ -70,7 +80,6 @@ if not st.session_state['autenticado']:
 # --- DADOS ---
 NOME_USUARIO = st.session_state['usuario']
 try:
-    # Garante que colunas numéricas sejam números
     numeric_cols = [c for c in COLUNAS_OFICIAIS if c not in ['Usuario', 'Data', 'Detalhes', 'Status']]
     if not df_geral.empty:
         for col in numeric_cols:
@@ -87,46 +96,59 @@ try:
 except:
     df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
-# --- CÉREBRO INTELIGENTE ---
+# --- CÉREBRO EINSTEIN (SUPER INTELIGENTE) ---
 def processar_texto(frase):
     frase = frase.lower().replace(',', '.')
-    # Dicionário inicial zerado
     res = {col: 0.0 for col in COLUNAS_OFICIAIS if col not in ['ID_Unico', 'Status', 'Usuario', 'Data', 'Detalhes']}
     res['Detalhes'] = []
     
-    # Mapa de Palavras-Chave (Agora com mais variações)
+    # Dicionário expandido - O Robô aprendeu tudo isso aqui:
     mapa = {
-        'urbano': 'Urbano', '99': 'Urbano', 'pop': 'Urbano', 'indrive': 'Urbano',
-        'bora': 'Boraali', 'borali': 'Boraali', 'boraali': 'Boraali',
-        '163': 'app163',
-        'particula': 'Outros_Receita', 'viagem': 'Outros_Receita', 'gorjeta': 'Outros_Receita',
-        'energia': 'Energia', 'luz': 'Energia', 'carreg': 'Energia', 'gasolina': 'Energia', 
-        'combustivel': 'Energia', 'posto': 'Energia',
-        'manut': 'Manuten', 'pneu': 'Manuten', 'oleo': 'Manuten', 'lavagem': 'Manuten', 'oficina': 'Manuten',
-        'seguro': 'Seguro', 
-        'app': 'Aplicativo', 'mensalidade': 'Aplicativo', 'internet': 'Aplicativo',
-        'marmita': 'Outros_Custos', 'almoco': 'Outros_Custos', 'almoço': 'Outros_Custos', 
-        'lanche': 'Outros_Custos', 'agua': 'Outros_Custos', 'cafe': 'Outros_Custos'
+        # --- GANHOS ---
+        'Urbano': ['urbano', '99', 'pop', 'indrive', 'uber', 'black', 'comfort', 'x'],
+        'Boraali': ['bora', 'borali', 'boraali'],
+        'app163': ['163', 'app163'],
+        'Outros_Receita': ['particula', 'viagem', 'gorjeta', 'corrida', 'passageiro', 'extra'],
+        
+        # --- DESPESAS: ENERGIA ---
+        'Energia': ['energia', 'luz', 'carreg', 'kwh', 'posto', 'eletrico', 
+                   'gasolina', 'combustivel', 'diesel', 'etanol', 'alcool', 'abastec'],
+                   
+        # --- DESPESAS: MANUTENÇÃO ---
+        'Manuten': ['manut', 'pneu', 'oleo', 'filtro', 'lavagem', 'limpeza', 'oficina', 
+                   'peca', 'freio', 'pastilha', 'revisao', 'alinhamento', 'balanceamento', 'lampada'],
+                   
+        # --- DESPESAS: ALIMENTAÇÃO (VÁRIAS PALAVRAS) ---
+        'Alimentacao': ['marmita', 'almoco', 'almoço', 'janta', 'lanche', 'cafe', 'café', 
+                       'mercado', 'comida', 'feijao', 'feijão', 'arroz', 'carne', 'restaurante', 
+                       'padaria', 'coxinha', 'salgado', 'suco', 'refri', 'refrigerante', 'agua', 'água', 'acai', 'açaí'],
+                       
+        # --- DESPESAS: APPS ---
+        'Aplicativo': ['app', 'mensalidade', 'internet', 'plano', 'vivo', 'claro', 'tim', 
+                      'sem parar', 'conectcar', 'tag', 'assinatura', 'recarga'],
+                      
+        # --- DESPESAS: OUTROS ---
+        'Seguro': ['seguro', 'franquia', 'sinistro'],
+        'Outros_Custos': ['multa', 'ipva', 'licenciamento', 'doc', 'detran', 'pedagio']
     }
     
-    pedacos = re.findall(r'([a-z1-9á-úç]+)\s*(\d+[\.]?\d*)', frase)
+    # Lógica de Varredura
+    pedacos = re.findall(r'([a-z1-9á-úçãõ]+)\s*(\d+[\.]?\d*)', frase)
     
     for item, valor_str in pedacos:
         valor = float(valor_str)
         achou = False
         
-        # 1. Tenta achar no mapa conhecido
-        for chave, col_destino in mapa.items():
-            if chave in item:
-                res[col_destino] += valor
-                achou = True; break
+        # Varre o dicionário inteligente
+        for coluna_destino, lista_palavras in mapa.items():
+            # Verifica se alguma das palavras está no item digitado
+            if any(palavra in item for palavra in lista_palavras):
+                res[coluna_destino] += valor
+                achou = True
+                break # Para de procurar se achou
         
-        # 2. Se não achou, joga para Detalhes e pergunta depois (Lógica de segurança)
+        # Se não achou NADA, aí sim pergunta
         if not achou:
-            # Por padrão, assume que é Outra Receita se for valor alto (>100) ou Custo se baixo,
-            # mas coloca no 'Detalhes' para o motorista validar.
-            # Aqui simplificamos: Joga em Outros_Receita e adiciona o nome.
-            # Na tela de conferência o motorista ajusta.
             res['Outros_Receita'] += valor 
             res['Detalhes'].append(f"{item} (?)")
         
@@ -147,17 +169,15 @@ with aba_lanc:
     # TELA 1: DADOS
     if not st.session_state['em_conferencia']:
         st.write("Resumo do plantão:")
-        texto = st.text_area("", key="txt_entrada", placeholder="Ex: urbano 350, borali 100, almoço 20...", height=100)
+        texto = st.text_area("", key="txt_entrada", placeholder="Ex: urbano 350, feijão 20, mensalidade 50...", height=100)
         
         st.write("📸 **Foto do KM**")
-        # Inverti a ordem aqui: Galeria primeiro!
         tipo_foto = st.radio("Fonte:", ["Galeria 📂", "Câmera 📷"], horizontal=True, label_visibility="collapsed")
         
         foto = None
         if tipo_foto == "Câmera 📷":
             col_esq, col_meio, col_dir = st.columns([1, 4, 1])
-            with col_meio:
-                foto = st.camera_input("Tirar Foto")
+            with col_meio: foto = st.camera_input("Tirar Foto")
         else:
             foto = st.file_uploader("Carregar Arquivo", type=['png', 'jpg', 'jpeg'])
         
@@ -166,7 +186,7 @@ with aba_lanc:
             if not texto and not foto:
                 st.warning("⚠️ Digite algo ou suba uma foto.")
             else:
-                with st.spinner("O Robô está lendo..."):
+                with st.spinner("Lendo..."):
                     dados_lidos = processar_texto(texto)
                     km_lido = 0
                     if foto:
@@ -183,34 +203,31 @@ with aba_lanc:
                     st.session_state['em_conferencia'] = True
                     st.rerun()
 
-    # TELA 2: CONFERÊNCIA
+    # TELA 2: CONFERÊNCIA AUTOMÁTICA
     else:
         d = st.session_state['dados_temp']
-        st.info("🔎 O Robô entendeu isso. Corrija se precisar:")
+        st.info("🔎 Confira se entendi certo:")
         
-        # --- BLOCO INTELIGENTE DE CONFERÊNCIA ---
         c_receita, c_despesa = st.columns(2)
         with c_receita:
             st.success("💰 **GANHOS**")
-            # Mostra campos apenas se tiverem valor ou se for os principais
-            val_urbano = st.number_input("Urbano / 99 / InDrive", value=d['Urbano'])
+            val_urbano = st.number_input("Urbano / 99", value=d['Urbano'])
             val_bora = st.number_input("BoraAli", value=d['Boraali'])
             val_163 = st.number_input("App 163", value=d['app163'])
-            # Se o sistema não soube o que era, jogou aqui. O motorista ajusta.
-            val_outros_rec = st.number_input("Outros / Particular", value=d['Outros_Receita'], help="Coisas que o robô não identificou caem aqui")
+            val_outros_rec = st.number_input("Outros", value=d['Outros_Receita'], help="Ganhos não identificados")
         
         with c_despesa:
             st.error("💸 **GASTOS**")
             val_energia = st.number_input("Energia / Combustível", value=d['Energia'])
-            val_manut = st.number_input("Manutenção / Lavagem", value=d['Manuten'])
-            val_custos = st.number_input("Alimentação / Diversos", value=d['Outros_Custos'])
+            val_manut = st.number_input("Manutenção", value=d['Manuten'])
+            val_alimentacao = st.number_input("Alimentação", value=d['Alimentacao']) 
             val_app = st.number_input("Mensalidades Apps", value=d['Aplicativo'])
+            val_seguro = st.number_input("Seguro", value=d.get('Seguro', 0.0))
+            val_custos = st.number_input("Outros Custos", value=d['Outros_Custos'])
             
         st.warning("🚗 **KM FINAL**")
         val_km = st.number_input("Hodômetro:", value=int(d['KM_Final']), step=1)
-        
-        # Campo para Detalhes (Opcional)
-        detalhes_str = st.text_input("Observação (Opcional):", value=", ".join(d['Detalhes']))
+        detalhes_str = st.text_input("Obs:", value=", ".join(d['Detalhes']))
 
         col_voltar, col_salvar = st.columns([1, 2])
         if col_voltar.button("↩️ Voltar"):
@@ -222,17 +239,16 @@ with aba_lanc:
             
             nova = {col: 0 for col in COLUNAS_OFICIAIS}
             nova.update({
-                'ID_Unico': id_novo,
-                'Status': 'Ativo',
+                'ID_Unico': id_novo, 'Status': 'Ativo',
                 'Usuario': NOME_USUARIO, 'Data': datetime.now().strftime("%Y-%m-%d"),
                 'Urbano': val_urbano, 'Boraali': val_bora, 'app163': val_163, 'Outros_Receita': val_outros_rec,
-                'Energia': val_energia, 'Manuten': val_manut, 'Seguro': d.get('Seguro', 0.0), 'Aplicativo': val_app,
-                'Outros_Custos': val_custos, 'KM_Final': val_km, 'Detalhes': detalhes_str
+                'Energia': val_energia, 'Manuten': val_manut, 'Seguro': val_seguro, 'Aplicativo': val_app,
+                'Alimentacao': val_alimentacao, 'Outros_Custos': val_custos, 
+                'KM_Final': val_km, 'Detalhes': detalhes_str
             })
             
-            # --- BLINDAGEM ANTI-SOLUÇO ---
             sucesso = False
-            my_bar = st.progress(0, text="Acordando banco de dados...")
+            my_bar = st.progress(0, text="Salvando...")
             for tentativa in range(3):
                 try:
                     df_atual = conn.read(worksheet=0, ttl="0")
@@ -241,7 +257,7 @@ with aba_lanc:
                     sucesso = True
                     my_bar.progress(100, text="Salvo!")
                     break 
-                except Exception as e:
+                except:
                     time.sleep(1)
                     my_bar.progress(33*(tentativa+1), text=f"Reconectando... ({tentativa+1}/3)")
             my_bar.empty()
@@ -253,71 +269,62 @@ with aba_lanc:
                 st.session_state['em_conferencia'] = False
                 st.rerun()
             else:
-                st.error("Erro de conexão. Tente clicar em CONFIRMAR novamente.")
+                st.error("Erro de conexão. Tente novamente.")
 
-# === ABA 2: EXTRATO & AJUSTES ===
+# === ABA 2: EXTRATO ===
 with aba_extrato:
     if not df_usuario.empty:
         # Métricas
         g = df_usuario[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().sum()
-        d = df_usuario[['Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos']].sum().sum()
+        d = df_usuario[['Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos']].sum().sum()
         c1, c2, c3 = st.columns(3)
         c1.metric("Ganhos", f"R$ {g:,.0f}")
         c2.metric("Gastos", f"R$ {d:,.0f}")
         c3.metric("Lucro", f"R$ {g-d:,.0f}")
         
         st.write("---")
-        st.caption("📋 Histórico Completo (Itens Zerados são Ocultos)")
+        st.caption("📋 Histórico")
         
-        # --- EXTRATO DINÂMICO (SOLUÇÃO DO PROBLEMA DO BORALI) ---
-        # Filtra apenas colunas que tem algum valor > 0 em todo o histórico do usuário
         cols_para_mostrar = ['Data']
-        # Pega todas as colunas numéricas
-        cols_numericas = ['Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos', 'KM_Final']
+        numeric_cols_check = [
+            'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
+            'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 
+            'KM_Final'
+        ]
         
-        for col in cols_numericas:
-            # Se a soma da coluna for diferente de zero, ela entra na tabela
-            if df_usuario[col].sum() != 0:
+        for col in numeric_cols_check:
+            if col in df_usuario.columns and df_usuario[col].sum() != 0:
                 cols_para_mostrar.append(col)
         
-        cols_para_mostrar.append('Detalhes') # Sempre mostra detalhes
+        cols_para_mostrar.append('Detalhes')
+        cols_finais = [c for c in cols_para_mostrar if c in df_usuario.columns]
         
-        # Mostra a tabela dinâmica
-        df_show = df_usuario[cols_para_mostrar].iloc[::-1].head(15)
-        st.dataframe(df_show, use_container_width=True, hide_index=True)
+        st.dataframe(df_usuario[cols_finais].iloc[::-1].head(15), use_container_width=True, hide_index=True)
 
-        # --- ÁREA DE CORREÇÃO ---
         st.write("")
         with st.expander("🛠️ Correções / Lixeira"):
-            lista_opcoes = df_usuario.iloc[::-1].head(10).to_dict('records')
-            if lista_opcoes:
-                opcoes_formatadas = {f"{row['Data']} | ID:{row['ID_Unico']}": row['ID_Unico'] for row in lista_opcoes}
-                escolha = st.selectbox("Apagar item:", list(opcoes_formatadas.keys()))
-                id_para_apagar = opcoes_formatadas[escolha]
+            lista = df_usuario.iloc[::-1].head(10).to_dict('records')
+            if lista:
+                opts = {f"{r['Data']} | ID:{r['ID_Unico']}": r['ID_Unico'] for r in lista}
+                sel = st.selectbox("Apagar item:", list(opts.keys()))
+                id_del = opts[sel]
                 
-                if st.button("🗑️ Apagar"):
-                    st.session_state['confirmar_delete'] = True
+                if st.button("🗑️ Apagar"): st.session_state['confirm_del'] = True
                 
-                if st.session_state.get('confirmar_delete'):
-                    st.error("Confirma exclusão?")
-                    c_s, c_n = st.columns(2)
-                    if c_s.button("Sim"):
+                if st.session_state.get('confirm_del'):
+                    st.error("Confirma?")
+                    if st.button("Sim"):
                         try:
                             df_full = conn.read(worksheet=0, ttl="0")
-                            mask = df_full['ID_Unico'] == id_para_apagar
+                            mask = df_full['ID_Unico'] == id_del
                             if mask.any():
                                 df_full.loc[mask, 'Status'] = 'Lixeira'
                                 conn.update(worksheet=0, data=df_full)
-                                st.success("Apagado!")
-                                st.session_state['confirmar_delete'] = False
+                                st.success("Feito!")
+                                st.session_state['confirm_del'] = False
                                 time.sleep(1)
                                 st.rerun()
-                        except: st.error("Erro ao apagar.")
-                    if c_n.button("Não"):
-                        st.session_state['confirmar_delete'] = False
-                        st.rerun()
-            else:
-                st.info("Nada para apagar.")
-
+                        except: st.error("Erro.")
+            else: st.info("Vazio.")
     else:
         st.info("Sem dados.")
