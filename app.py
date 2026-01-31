@@ -25,11 +25,13 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- CONEXÃO E COLUNAS ---
+# Adicionei KM_Inicial na lista oficial para ficar registrado se quiser no futuro, 
+# mas o calculo principal é feito na hora.
 COLUNAS_OFICIAIS = [
     'ID_Unico', 'Status', 'Usuario', 'Data', 
     'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
     'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 
-    'KM_Final', 'Detalhes'
+    'KM_Inicial', 'KM_Final', 'Detalhes'
 ]
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -105,7 +107,7 @@ with aba_lanc:
     if not st.session_state['em_conferencia']:
         st.info("Preencha apenas o que teve no dia:")
         
-        # AGORA VEM FECHADO (expanded=False)
+        # 1. GANHOS (Fechado)
         with st.expander("💰 RECEITAS (GANHOS)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
@@ -115,7 +117,7 @@ with aba_lanc:
                 v_163 = st.number_input("App 163", min_value=0.0, step=10.0, key="in_163")
                 v_outros = st.number_input("Particular / Outros", min_value=0.0, step=10.0, key="in_outros")
 
-        # AGORA VEM FECHADO (expanded=False)
+        # 2. DESPESAS (Fechado)
         with st.expander("💸 DESPESAS (GASTOS)", expanded=False):
             c3, c4 = st.columns(2)
             with c3:
@@ -127,32 +129,57 @@ with aba_lanc:
                 v_seguro = st.number_input("Seguro", min_value=0.0, step=10.0, key="in_seguro")
                 v_custos = st.number_input("Outros Custos", min_value=0.0, step=10.0, key="in_custos")
 
-        # KM Manual
+        # 3. HODÔMETRO (Aberto e Inteligente)
         st.write("🚗 **Hodômetro**")
-        v_km_manual = st.number_input("KM Final do Painel:", min_value=0, step=1, format="%d", key="in_km")
-        obs = st.text_input("Observação (Opcional):", placeholder="Ex: Pneu furou...")
+        
+        # LÓGICA DE PUXAR O ÚLTIMO KM
+        ultimo_km_registrado = 0
+        if not df_usuario.empty:
+            # Ordena por Data e depois ID (descrescente) para pegar o mais recente
+            try:
+                df_sorted = df_usuario.sort_values(by=['Data', 'ID_Unico'], ascending=False)
+                ultimo_km_registrado = int(df_sorted.iloc[0]['KM_Final'])
+            except:
+                ultimo_km_registrado = 0
 
-        # CÁLCULO DE LUCRO EM TEMPO REAL
+        c_km1, c_km2 = st.columns(2)
+        with c_km1:
+            # Traz o último KM como padrão
+            v_km_ini = st.number_input("KM Inicial (Início do dia)", min_value=0, step=1, value=ultimo_km_registrado, format="%d", key="in_km_ini")
+        with c_km2:
+            v_km_fim = st.number_input("KM Final (Agora)", min_value=0, step=1, format="%d", key="in_km_fim")
+        
+        # Mostra quanto rodou
+        km_rodado_hoje = 0
+        if v_km_fim > v_km_ini:
+            km_rodado_hoje = v_km_fim - v_km_ini
+            st.caption(f"🛣️ Você rodou **{km_rodado_hoje} KM** hoje.")
+        
+        obs = st.text_input("Observação (Opcional):", placeholder="Ex: Troca de óleo...")
+
+        # CÁLCULO DE LUCRO
         t_receita = v_urbano + v_bora + v_163 + v_outros
         t_despesa = v_energia + v_alimentacao + v_manut + v_app + v_custos + v_seguro
         t_lucro = t_receita - t_despesa
         
         st.divider()
         col_l1, col_l2, col_l3 = st.columns(3)
-        col_l1.metric("Receita Hoje", f"R$ {t_receita:.2f}")
-        col_l2.metric("Despesa Hoje", f"R$ {t_despesa:.2f}")
-        col_l3.metric("Lucro Líquido", f"R$ {t_lucro:.2f}", delta_color="normal")
+        col_l1.metric("Receita", f"R$ {t_receita:.2f}")
+        col_l2.metric("Despesa", f"R$ {t_despesa:.2f}")
+        col_l3.metric("Lucro", f"R$ {t_lucro:.2f}", delta_color="normal")
 
         st.write("")
         if st.button("AVANÇAR PARA CONFERÊNCIA ➡️", type="primary", use_container_width=True):
-            if t_receita == 0 and t_despesa == 0 and v_km_manual == 0:
-                st.warning("⚠️ Tudo zerado? Preencha algo.")
+            if t_receita == 0 and t_despesa == 0 and v_km_fim == 0:
+                st.warning("⚠️ Tudo zerado?")
+            elif v_km_fim > 0 and v_km_fim < v_km_ini:
+                st.error("⚠️ O KM Final não pode ser menor que o Inicial!")
             else:
                 st.session_state['dados_temp'] = {
                     'Urbano': v_urbano, 'Boraali': v_bora, 'app163': v_163, 'Outros_Receita': v_outros,
                     'Energia': v_energia, 'Alimentacao': v_alimentacao, 'Manuten': v_manut,
                     'Aplicativo': v_app, 'Outros_Custos': v_custos, 'Seguro': v_seguro,
-                    'KM_Final': v_km_manual, 'Detalhes': obs
+                    'KM_Inicial': v_km_ini, 'KM_Final': v_km_fim, 'Detalhes': obs
                 }
                 st.session_state['em_conferencia'] = True
                 st.rerun()
@@ -165,11 +192,16 @@ with aba_lanc:
         c_res1, c_res2 = st.columns(2)
         total_ganhos = d['Urbano'] + d['Boraali'] + d['app163'] + d['Outros_Receita']
         total_gastos = d['Energia'] + d['Alimentacao'] + d['Manuten'] + d['Aplicativo'] + d['Outros_Custos'] + d['Seguro']
+        km_dia = d['KM_Final'] - d['KM_Inicial']
         
         with c_res1: st.success(f"💰 Receita: R$ {total_ganhos:,.2f}")
         with c_res2: st.error(f"💸 Despesa: R$ {total_gastos:,.2f}")
             
         st.metric("LUCRO FINAL", f"R$ {total_ganhos - total_gastos:,.2f}")
+        
+        # Resumo do KM
+        if km_dia > 0:
+            st.info(f"🛣️ Rodagem: {d['KM_Inicial']} ➝ {d['KM_Final']} (**{km_dia} KM**)")
         
         col_voltar, col_salvar = st.columns([1, 2])
         if col_voltar.button("✏️ Editar"):
@@ -186,7 +218,7 @@ with aba_lanc:
                 'Urbano': d['Urbano'], 'Boraali': d['Boraali'], 'app163': d['app163'], 'Outros_Receita': d['Outros_Receita'],
                 'Energia': d['Energia'], 'Manuten': d['Manuten'], 'Seguro': d['Seguro'], 'Aplicativo': d['Aplicativo'],
                 'Alimentacao': d['Alimentacao'], 'Outros_Custos': d['Outros_Custos'], 
-                'KM_Final': d['KM_Final'], 'Detalhes': d['Detalhes']
+                'KM_Inicial': d['KM_Inicial'], 'KM_Final': d['KM_Final'], 'Detalhes': d['Detalhes']
             })
             
             sucesso = False
@@ -218,9 +250,15 @@ with aba_extrato:
         df_show['Custo_Total'] = df_show['Energia'] + df_show['Manuten'] + df_show['Seguro'] + df_show['Aplicativo'] + df_show['Alimentacao'] + df_show['Outros_Custos']
         df_show['Lucro'] = df_show['Receita_Total'] - df_show['Custo_Total']
         
+        # Calcula KM Rodado por lançamento (segurança caso KM_Inicial esteja vazio)
+        df_show['KM_Rodado'] = df_show['KM_Final'] - df_show['KM_Inicial']
+        # Se der negativo ou zero (erro de lançamento), assume 0 para não quebrar a conta
+        df_show['KM_Rodado'] = df_show['KM_Rodado'].apply(lambda x: x if x > 0 else 0)
+
         if "Dia a Dia" in tipo_visao:
             st.caption("Lista de lançamentos recentes.")
-            cols = ['Data', 'Receita_Total', 'Custo_Total', 'Lucro', 'Energia', 'Alimentacao', 'KM_Final', 'Detalhes']
+            # Mostra KM Inicial e Final no detalhe
+            cols = ['Data', 'Receita_Total', 'Custo_Total', 'Lucro', 'KM_Inicial', 'KM_Final', 'Detalhes']
             st.dataframe(df_show[cols].sort_values('Data', ascending=False), use_container_width=True, hide_index=True)
             
             st.divider()
@@ -229,20 +267,15 @@ with aba_extrato:
                 if lista:
                     opts = {f"{r['Data'].strftime('%d/%m')} | R$ {r['Receita_Total']:.0f} (ID {r['ID_Unico']})": str(r['ID_Unico']) for r in lista}
                     sel = st.selectbox("Selecione o item:", list(opts.keys()))
-                    
                     if st.button("🗑️ Apagar Item"):
                         try:
                             df_full = conn.read(worksheet=0, ttl="0")
                             df_full['ID_Unico'] = df_full['ID_Unico'].astype(str)
-                            id_alvo = opts[sel]
-                            
-                            if id_alvo in df_full['ID_Unico'].values:
-                                df_full.loc[df_full['ID_Unico'] == id_alvo, 'Status'] = 'Lixeira'
+                            if opts[sel] in df_full['ID_Unico'].values:
+                                df_full.loc[df_full['ID_Unico'] == opts[sel], 'Status'] = 'Lixeira'
                                 conn.update(worksheet=0, data=df_full)
-                                st.success("Apagado com sucesso!")
-                                time.sleep(1)
-                                st.rerun()
-                            else: st.error("Erro: ID não encontrado.")
+                                st.success("Apagado!"); time.sleep(1); st.rerun()
+                            else: st.error("Erro ID.")
                         except Exception as e: st.error(f"Erro: {e}")
                 else: st.info("Sem dados recentes.")
 
@@ -250,10 +283,12 @@ with aba_extrato:
             if "Mensal" in tipo_visao: df_show['Periodo'] = df_show['Data'].dt.to_period('M').astype(str)
             else: df_show['Periodo'] = df_show['Data'].dt.to_period('Y').astype(str)
             
-            resumo = df_show.groupby('Periodo')[['Receita_Total', 'Custo_Total', 'Lucro', 'KM_Final', 'Energia']].sum().reset_index()
-            resumo['R$/KM'] = resumo.apply(lambda x: x['Receita_Total'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
-            resumo['Custo/KM'] = resumo.apply(lambda x: x['Custo_Total'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
-            resumo['Lucro/KM'] = resumo.apply(lambda x: x['Lucro'] / x['KM_Final'] if x['KM_Final'] > 0 else 0, axis=1)
+            # Agrupa e soma (agora soma o KM Rodado calculado linha a linha)
+            resumo = df_show.groupby('Periodo')[['Receita_Total', 'Custo_Total', 'Lucro', 'KM_Rodado']].sum().reset_index()
+            
+            resumo['R$/KM'] = resumo.apply(lambda x: x['Receita_Total'] / x['KM_Rodado'] if x['KM_Rodado'] > 0 else 0, axis=1)
+            resumo['Custo/KM'] = resumo.apply(lambda x: x['Custo_Total'] / x['KM_Rodado'] if x['KM_Rodado'] > 0 else 0, axis=1)
+            resumo['Lucro/KM'] = resumo.apply(lambda x: x['Lucro'] / x['KM_Rodado'] if x['KM_Rodado'] > 0 else 0, axis=1)
             
             st.markdown(f"### 📊 Relatório {tipo_visao}")
             st.dataframe(
@@ -262,6 +297,7 @@ with aba_extrato:
                     "Receita_Total": st.column_config.NumberColumn("Receita", format="R$ %.2f"),
                     "Custo_Total": st.column_config.NumberColumn("Custos", format="R$ %.2f"),
                     "Lucro": st.column_config.NumberColumn("Lucro Líquido", format="R$ %.2f"),
+                    "KM_Rodado": st.column_config.NumberColumn("KM Rodado", format="%d km"),
                     "R$/KM": st.column_config.NumberColumn("R$/KM", format="R$ %.2f"),
                     "Lucro/KM": st.column_config.NumberColumn("Lucro/KM", format="R$ %.2f"),
                 },
