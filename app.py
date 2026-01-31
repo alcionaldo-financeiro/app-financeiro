@@ -17,7 +17,7 @@ st.markdown("""
     .stDeployButton {display: none; visibility: hidden;}
     .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important;}
     
-    /* 1. BOTÃO VERDE (SALVAR) */
+    /* 1. BOTÃO VERDE (ENTRAR / SALVAR) */
     div.stButton > button[kind="primary"] {
         background-color: #28a745 !important; 
         border-color: #28a745 !important;
@@ -35,7 +35,7 @@ st.markdown("""
         border-radius: 8px;
     }
 
-    /* 3. INPUTS NUMÉRICOS GIGANTES E LIMPOS */
+    /* 3. INPUTS NUMÉRICOS GIGANTES */
     .stNumberInput input {
         font-size: 20px !important; 
         font-weight: bold; 
@@ -47,7 +47,7 @@ st.markdown("""
 
 # --- CONEXÃO ---
 COLUNAS_OFICIAIS = [
-    'ID_Unico', 'Status', 'Usuario', 'Data', 
+    'ID_Unico', 'Status', 'Usuario', 'CPF', 'Data', 
     'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
     'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 
     'KM_Inicial', 'KM_Final', 'Detalhes'
@@ -65,7 +65,7 @@ def conectar_banco():
         mudou = False
         for col in COLUNAS_OFICIAIS:
             if col not in df.columns:
-                df[col] = 0 if col not in ['Usuario', 'Data', 'Detalhes', 'Status'] else ''
+                df[col] = 0 if col not in ['Usuario', 'CPF', 'Data', 'Detalhes', 'Status'] else ''
                 mudou = True
         
         df['ID_Unico'] = df['ID_Unico'].astype(str)
@@ -76,30 +76,57 @@ def conectar_banco():
 
 df_geral, STATUS = conectar_banco()
 
-# --- LOGIN ---
+# --- HELPER: Limpa valor vazio ---
+def safe_val(val):
+    return val if val is not None else 0.0
+
+# --- TELA DE LOGIN (COM TRAVA DE CPF) ---
 if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
+
 if not st.session_state['autenticado']:
     st.markdown("<br>", unsafe_allow_html=True)
     st.title("💎 BYD Pro")
-    usuario = st.text_input("Nome do Motorista:", placeholder="Digite aqui...").strip().lower()
+    st.write("### Identificação do Piloto")
+    
+    c_login1, c_login2 = st.columns(2)
+    with c_login1:
+        usuario_input = st.text_input("Nome Completo:", placeholder="Ex: João Silva").strip()
+    with c_login2:
+        cpf_input = st.text_input("CPF (Apenas números):", max_chars=14, placeholder="000.000.000-00")
+
     st.write("")
     if st.button("ACESSAR SISTEMA 🚀", type="primary", use_container_width=True):
-        if usuario:
-            st.session_state['usuario'] = usuario
+        # 1. Limpa o CPF (tira pontos e traços)
+        cpf_limpo = re.sub(r'\D', '', cpf_input)
+        
+        # 2. Validação (Trava Anti-Erro)
+        if not usuario_input:
+            st.warning("⚠️ Favor digitar o Nome.")
+        elif not cpf_limpo:
+            st.warning("⚠️ Favor digitar o CPF.")
+        elif len(cpf_limpo) != 11:
+            st.warning(f"⚠️ CPF Inválido! O CPF deve ter exatamente 11 dígitos. Você digitou {len(cpf_limpo)}.")
+        else:
+            # SUCESSO
+            st.session_state['usuario'] = usuario_input.lower()
+            st.session_state['cpf_usuario'] = cpf_limpo
             st.session_state['autenticado'] = True
             st.rerun()
     st.stop()
 
 # --- DADOS ---
 NOME_USUARIO = st.session_state['usuario']
+CPF_USUARIO = st.session_state['cpf_usuario']
+
 try:
-    numeric_cols = [c for c in COLUNAS_OFICIAIS if c not in ['ID_Unico', 'Usuario', 'Data', 'Detalhes', 'Status']]
+    numeric_cols = [c for c in COLUNAS_OFICIAIS if c not in ['ID_Unico', 'Usuario', 'CPF', 'Data', 'Detalhes', 'Status']]
     if not df_geral.empty:
         df_geral['ID_Unico'] = df_geral['ID_Unico'].astype(str)
         for col in numeric_cols:
             if col in df_geral.columns:
                 df_geral[col] = pd.to_numeric(df_geral[col], errors='coerce').fillna(0)
     
+    # Filtra pelo Nome (Poderíamos filtrar pelo CPF também no futuro para ser mais estrito)
     if 'Usuario' in df_geral.columns and 'Status' in df_geral.columns:
         df_usuario = df_geral[
             (df_geral['Usuario'] == NOME_USUARIO) & 
@@ -110,10 +137,6 @@ try:
         df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
 except:
     df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
-
-# --- HELPER: Limpa valor vazio ---
-def safe_val(val):
-    return val if val is not None else 0.0
 
 # --- TELA PRINCIPAL ---
 c_logo, c_nome = st.columns([1, 5])
@@ -134,7 +157,6 @@ with aba_lanc:
         with st.expander("💰 RECEITAS (GANHOS)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
-                # value=None deixa o campo VAZIO (com sombra)
                 v_urbano = st.number_input("Urbano / 99", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_urbano")
                 v_bora = st.number_input("BoraAli", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_bora")
             with c2:
@@ -155,30 +177,24 @@ with aba_lanc:
 
         # Hodômetro
         st.write("🚗 **Hodômetro**")
-        ultimo_km = None # Padrão vazio se não tiver histórico
+        ultimo_km = None 
         if not df_usuario.empty:
-            try:
-                ultimo_km = int(df_usuario['KM_Final'].max())
+            try: ultimo_km = int(df_usuario['KM_Final'].max())
             except: pass
 
         c_km1, c_km2 = st.columns(2)
         with c_km1:
-            # KM Inicial puxa histórico, mas permite editar
             v_km_ini = st.number_input("KM Inicial", min_value=0, step=1, value=ultimo_km, placeholder="0", format="%d", key="in_km_ini")
         with c_km2:
-            # KM Final vem VAZIO para digitar
             v_km_fim = st.number_input("KM Final", min_value=0, step=1, value=None, placeholder="0", format="%d", key="in_km_fim")
         
-        # Logica de exibição de rodagem
         km_i_safe = v_km_ini if v_km_ini else 0
         km_f_safe = v_km_fim if v_km_fim else 0
-        
         if km_f_safe > km_i_safe:
             st.caption(f"🛣️ Rodagem: **{km_f_safe - km_i_safe} KM**")
         
         obs = st.text_input("Observação (Opcional):", placeholder="Ex: Pneu furou...")
 
-        # Cálculos (Usando safe_val para tratar os vazios como zero)
         t_receita = safe_val(v_urbano) + safe_val(v_bora) + safe_val(v_163) + safe_val(v_outros)
         t_despesa = safe_val(v_energia) + safe_val(v_alimentacao) + safe_val(v_manut) + safe_val(v_app) + safe_val(v_custos) + safe_val(v_seguro)
         t_lucro = t_receita - t_despesa
@@ -232,7 +248,7 @@ with aba_lanc:
             nova = {col: 0 for col in COLUNAS_OFICIAIS}
             nova.update({
                 'ID_Unico': id_novo, 'Status': 'Ativo',
-                'Usuario': NOME_USUARIO, 'Data': datetime.now().strftime("%Y-%m-%d"),
+                'Usuario': NOME_USUARIO, 'CPF': CPF_USUARIO, 'Data': datetime.now().strftime("%Y-%m-%d"),
                 'Urbano': d['Urbano'], 'Boraali': d['Boraali'], 'app163': d['app163'], 'Outros_Receita': d['Outros_Receita'],
                 'Energia': d['Energia'], 'Manuten': d['Manuten'], 'Seguro': d['Seguro'], 'Aplicativo': d['Aplicativo'],
                 'Alimentacao': d['Alimentacao'], 'Outros_Custos': d['Outros_Custos'], 
@@ -256,7 +272,7 @@ with aba_lanc:
                 time.sleep(1)
                 st.session_state['em_conferencia'] = False
                 st.rerun()
-            else: st.error("Erro ao salvar. Tente de novo.")
+            else: st.error("Erro ao salvar.")
 
 # === ABA 2: RELATÓRIOS ===
 with aba_extrato:
