@@ -8,7 +8,7 @@ import time
 # --- 1. CONFIGURAÇÃO VISUAL ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS NUCLEAR (CORES INTELIGENTES) ---
+# --- CSS NUCLEAR (CORES + INPUTS LIMPOS) ---
 st.markdown("""
     <style>
     /* Limpeza Geral */
@@ -17,40 +17,35 @@ st.markdown("""
     .stDeployButton {display: none; visibility: hidden;}
     .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important;}
     
-    /* 1. BOTÕES DE AÇÃO PRINCIPAL (SALVAR/CONFIRMAR) -> VERDE */
+    /* 1. BOTÃO VERDE (SALVAR) */
     div.stButton > button[kind="primary"] {
-        background-color: #28a745 !important; /* Verde Sucesso */
+        background-color: #28a745 !important; 
         border-color: #28a745 !important;
         color: white !important;
-        border-radius: 12px; 
-        height: 3.5em; 
-        font-weight: bold; 
-        font-size: 18px !important;
+        border-radius: 12px; height: 3.5em; font-weight: bold; font-size: 18px !important;
         box-shadow: 0px 4px 6px rgba(0,0,0,0.2);
     }
-    div.stButton > button[kind="primary"]:hover {
-        background-color: #218838 !important; /* Verde mais escuro no mouse */
-    }
-
-    /* 2. BOTÕES DENTRO DE EXPANDERS (LIXEIRA/APAGAR) -> VERMELHO */
-    /* O Streamlit usa a tag <details> para expanders. Tudo que for botão ali dentro vira vermelho */
+    
+    /* 2. BOTÃO VERMELHO (LIXEIRA) */
     details div.stButton > button {
-        background-color: #dc3545 !important; /* Vermelho Perigo */
+        background-color: #dc3545 !important;
         border-color: #dc3545 !important;
         color: white !important;
         font-weight: bold;
         border-radius: 8px;
     }
-    details div.stButton > button:hover {
-        background-color: #c82333 !important;
-    }
 
-    /* 3. Ajuste de Inputs Numéricos */
-    .stNumberInput input {font-size: 18px; font-weight: bold; text-align: center; padding: 10px;}
+    /* 3. INPUTS NUMÉRICOS GIGANTES E LIMPOS */
+    .stNumberInput input {
+        font-size: 20px !important; 
+        font-weight: bold; 
+        text-align: center; 
+        padding: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONEXÃO E COLUNAS ---
+# --- CONEXÃO ---
 COLUNAS_OFICIAIS = [
     'ID_Unico', 'Status', 'Usuario', 'Data', 
     'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
@@ -88,7 +83,6 @@ if not st.session_state['autenticado']:
     st.title("💎 BYD Pro")
     usuario = st.text_input("Nome do Motorista:", placeholder="Digite aqui...").strip().lower()
     st.write("")
-    # Este botão é Primary -> Vai ficar VERDE
     if st.button("ACESSAR SISTEMA 🚀", type="primary", use_container_width=True):
         if usuario:
             st.session_state['usuario'] = usuario
@@ -117,6 +111,10 @@ try:
 except:
     df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
+# --- HELPER: Limpa valor vazio ---
+def safe_val(val):
+    return val if val is not None else 0.0
+
 # --- TELA PRINCIPAL ---
 c_logo, c_nome = st.columns([1, 5])
 with c_logo: st.markdown("## 🚘")
@@ -132,48 +130,57 @@ with aba_lanc:
     if not st.session_state['em_conferencia']:
         st.info("Preencha apenas o que teve no dia:")
         
+        # Ganhos
         with st.expander("💰 RECEITAS (GANHOS)", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
-                v_urbano = st.number_input("Urbano / 99", min_value=0.0, step=10.0, key="in_urbano")
-                v_bora = st.number_input("BoraAli", min_value=0.0, step=10.0, key="in_bora")
+                # value=None deixa o campo VAZIO (com sombra)
+                v_urbano = st.number_input("Urbano / 99", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_urbano")
+                v_bora = st.number_input("BoraAli", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_bora")
             with c2:
-                v_163 = st.number_input("App 163", min_value=0.0, step=10.0, key="in_163")
-                v_outros = st.number_input("Particular / Outros", min_value=0.0, step=10.0, key="in_outros")
+                v_163 = st.number_input("App 163", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_163")
+                v_outros = st.number_input("Particular / Outros", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_outros")
 
+        # Despesas
         with st.expander("💸 DESPESAS (GASTOS)", expanded=False):
             c3, c4 = st.columns(2)
             with c3:
-                v_energia = st.number_input("Energia / Combustível", min_value=0.0, step=10.0, key="in_energia")
-                v_alimentacao = st.number_input("Alimentação / Lanche", min_value=0.0, step=10.0, key="in_alime")
-                v_manut = st.number_input("Manutenção / Lavagem", min_value=0.0, step=10.0, key="in_manut")
+                v_energia = st.number_input("Energia / Combustível", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_energia")
+                v_alimentacao = st.number_input("Alimentação / Lanche", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_alime")
+                v_manut = st.number_input("Manutenção / Lavagem", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_manut")
             with c4:
-                v_app = st.number_input("Apps / Internet", min_value=0.0, step=10.0, key="in_app")
-                v_seguro = st.number_input("Seguro", min_value=0.0, step=10.0, key="in_seguro")
-                v_custos = st.number_input("Outros Custos", min_value=0.0, step=10.0, key="in_custos")
+                v_app = st.number_input("Apps / Internet", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_app")
+                v_seguro = st.number_input("Seguro", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_seguro")
+                v_custos = st.number_input("Outros Custos", min_value=0.0, step=1.0, value=None, placeholder="0,00", key="in_custos")
 
-        # HODÔMETRO INTELIGENTE
+        # Hodômetro
         st.write("🚗 **Hodômetro**")
-        ultimo_km = 0
+        ultimo_km = None # Padrão vazio se não tiver histórico
         if not df_usuario.empty:
             try:
-                # Pega o maior KM já registrado para sugerir
                 ultimo_km = int(df_usuario['KM_Final'].max())
             except: pass
 
         c_km1, c_km2 = st.columns(2)
         with c_km1:
-            v_km_ini = st.number_input("KM Inicial", min_value=0, step=1, value=ultimo_km, format="%d", key="in_km_ini")
+            # KM Inicial puxa histórico, mas permite editar
+            v_km_ini = st.number_input("KM Inicial", min_value=0, step=1, value=ultimo_km, placeholder="0", format="%d", key="in_km_ini")
         with c_km2:
-            v_km_fim = st.number_input("KM Final", min_value=0, step=1, format="%d", key="in_km_fim")
+            # KM Final vem VAZIO para digitar
+            v_km_fim = st.number_input("KM Final", min_value=0, step=1, value=None, placeholder="0", format="%d", key="in_km_fim")
         
-        if v_km_fim > v_km_ini:
-            st.caption(f"🛣️ Rodagem do dia: **{v_km_fim - v_km_ini} KM**")
+        # Logica de exibição de rodagem
+        km_i_safe = v_km_ini if v_km_ini else 0
+        km_f_safe = v_km_fim if v_km_fim else 0
+        
+        if km_f_safe > km_i_safe:
+            st.caption(f"🛣️ Rodagem: **{km_f_safe - km_i_safe} KM**")
         
         obs = st.text_input("Observação (Opcional):", placeholder="Ex: Pneu furou...")
 
-        t_receita = v_urbano + v_bora + v_163 + v_outros
-        t_despesa = v_energia + v_alimentacao + v_manut + v_app + v_custos + v_seguro
+        # Cálculos (Usando safe_val para tratar os vazios como zero)
+        t_receita = safe_val(v_urbano) + safe_val(v_bora) + safe_val(v_163) + safe_val(v_outros)
+        t_despesa = safe_val(v_energia) + safe_val(v_alimentacao) + safe_val(v_manut) + safe_val(v_app) + safe_val(v_custos) + safe_val(v_seguro)
         t_lucro = t_receita - t_despesa
         
         st.divider()
@@ -183,18 +190,19 @@ with aba_lanc:
         col_l3.metric("Lucro", f"R$ {t_lucro:.2f}", delta_color="normal")
 
         st.write("")
-        # Botão Primary -> VERDE
         if st.button("AVANÇAR PARA CONFERÊNCIA ➡️", type="primary", use_container_width=True):
-            if t_receita == 0 and t_despesa == 0 and v_km_fim == 0:
+            if t_receita == 0 and t_despesa == 0 and km_f_safe == 0:
                 st.warning("⚠️ Tudo zerado?")
-            elif v_km_fim > 0 and v_km_fim < v_km_ini:
+            elif km_f_safe > 0 and km_f_safe < km_i_safe:
                 st.error("⚠️ KM Final menor que Inicial!")
             else:
                 st.session_state['dados_temp'] = {
-                    'Urbano': v_urbano, 'Boraali': v_bora, 'app163': v_163, 'Outros_Receita': v_outros,
-                    'Energia': v_energia, 'Alimentacao': v_alimentacao, 'Manuten': v_manut,
-                    'Aplicativo': v_app, 'Outros_Custos': v_custos, 'Seguro': v_seguro,
-                    'KM_Inicial': v_km_ini, 'KM_Final': v_km_fim, 'Detalhes': obs
+                    'Urbano': safe_val(v_urbano), 'Boraali': safe_val(v_bora), 
+                    'app163': safe_val(v_163), 'Outros_Receita': safe_val(v_outros),
+                    'Energia': safe_val(v_energia), 'Alimentacao': safe_val(v_alimentacao), 
+                    'Manuten': safe_val(v_manut), 'Aplicativo': safe_val(v_app), 
+                    'Outros_Custos': safe_val(v_custos), 'Seguro': safe_val(v_seguro),
+                    'KM_Inicial': km_i_safe, 'KM_Final': km_f_safe, 'Detalhes': obs
                 }
                 st.session_state['em_conferencia'] = True
                 st.rerun()
@@ -214,12 +222,10 @@ with aba_lanc:
         st.metric("LUCRO FINAL", f"R$ {total_ganhos - total_gastos:,.2f}")
         
         col_voltar, col_salvar = st.columns([1, 2])
-        # Botão Padrão (Secondary) -> Fica Cinza/Branco (Neutro)
         if col_voltar.button("✏️ Editar"):
             st.session_state['em_conferencia'] = False
             st.rerun()
             
-        # Botão Primary -> VERDE
         if col_salvar.button("✅ CONFIRMAR AGORA", type="primary", use_container_width=True):
             id_novo = str(int(time.time()))
             
@@ -271,13 +277,11 @@ with aba_extrato:
             st.dataframe(df_show[cols].sort_values('Data', ascending=False), use_container_width=True, hide_index=True)
             
             st.divider()
-            # Botão dentro do Expander vai ficar VERMELHO automaticamente pelo CSS
             with st.expander("🗑️ Excluir Lançamento (Lixeira)"):
                 lista = df_show.sort_values('Data', ascending=False).head(20).to_dict('records')
                 if lista:
                     opts = {f"{r['Data'].strftime('%d/%m')} | R$ {r['Receita_Total']:.0f} (ID {r['ID_Unico']})": str(r['ID_Unico']) for r in lista}
                     sel = st.selectbox("Selecione o item:", list(opts.keys()))
-                    
                     if st.button("🗑️ APAGAR ITEM PERMANENTEMENTE"):
                         try:
                             df_full = conn.read(worksheet=0, ttl="0")
