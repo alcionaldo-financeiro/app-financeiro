@@ -5,8 +5,7 @@ import PIL.Image as PILImage
 import pytesseract
 import re
 from datetime import datetime
-import plotly.express as px
-import time # Importante para dar tempo de ver a mensagem de sucesso
+import time
 
 # --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="BYD Pro - Gestão Inteligente", page_icon="💎", layout="wide")
@@ -20,22 +19,19 @@ COLUNAS_OFICIAIS = [
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- SISTEMA DE CONEXÃO "CORINGA" ---
+# --- CONEXÃO INTELIGENTE ---
 def conectar_banco():
     try:
-        # Lê a PRIMEIRA aba (Index 0) para evitar erro de nome
+        # Lê a PRIMEIRA aba (Index 0)
         df = conn.read(worksheet=0, ttl="0")
-        
         if df is None or df.empty or len(df.columns) < 2:
             df_novo = pd.DataFrame(columns=COLUNAS_OFICIAIS)
             conn.update(worksheet=0, data=df_novo)
             return df_novo, "Primeira Aba (Auto)"
-            
         return df, "Conectado!"
     except Exception as e:
         return pd.DataFrame(columns=COLUNAS_OFICIAIS), f"Erro: {e}"
 
-# Carrega os dados
 df_geral, STATUS_CONEXAO = conectar_banco()
 
 # --- LOGIN ---
@@ -44,8 +40,7 @@ if 'autenticado' not in st.session_state:
 
 if not st.session_state['autenticado']:
     st.markdown("# 💎 BYD Pro")
-    st.write("### O Sistema do Motorista de Elite")
-    usuario = st.text_input("Identifique-se (Nome):").strip().lower()
+    usuario = st.text_input("Motorista:").strip().lower()
     if st.button("Acessar Painel 🚀"):
         if usuario:
             st.session_state['usuario'] = usuario
@@ -53,7 +48,7 @@ if not st.session_state['autenticado']:
             st.rerun()
     st.stop()
 
-# --- DADOS DO USUÁRIO ---
+# --- DADOS ---
 NOME_USUARIO = st.session_state['usuario']
 
 try:
@@ -70,18 +65,27 @@ try:
 except:
     df_usuario = pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
-# --- CÉREBRO ---
+# --- CÉREBRO (Texto) ---
 def processar_texto(frase):
     frase = frase.lower().replace(',', '.')
     res = {'Ganhos': {}, 'Gastos': {}, 'Detalhes': []}
+    
     mapa = {
         'urbano': ('Ganhos', 'Urbano'), 'bora': ('Ganhos', 'Boraali'), '163': ('Ganhos', 'app163'),
         'particula': ('Ganhos', 'Outros_Receita'), 'viagem': ('Ganhos', 'Outros_Receita'),
-        'energia': ('Gastos', 'Energia'), 'gasolina': ('Gastos', 'Energia'), 'alcool': ('Gastos', 'Energia'),
-        'manut': ('Gastos', 'Manuten'), 'seguro': ('Gastos', 'Seguro'), 'app': ('Gastos', 'Aplicativo'),
-        'marmita': ('Gastos', 'Outros_Custos'), 'almoco': ('Gastos', 'Outros_Custos')
+        'energia': ('Gastos', 'Energia'), 'luz': ('Gastos', 'Energia'), 
+        'carreg': ('Gastos', 'Energia'), 'gasolina': ('Gastos', 'Energia'),
+        'manut': ('Gastos', 'Manuten'), 'pneu': ('Gastos', 'Manuten'), 
+        'oleo': ('Gastos', 'Manuten'), 'lavagem': ('Gastos', 'Manuten'),
+        'seguro': ('Gastos', 'Seguro'), 'app': ('Gastos', 'Aplicativo'), 
+        'mensalidade': ('Gastos', 'Aplicativo'),
+        'marmita': ('Gastos', 'Outros_Custos'), 'almoco': ('Gastos', 'Outros_Custos'),
+        'almoço': ('Gastos', 'Outros_Custos'), 'lanche': ('Gastos', 'Outros_Custos'),
+        'agua': ('Gastos', 'Outros_Custos')
     }
-    pedacos = re.findall(r'([a-z1-9á-ú]+)\s*(\d+[\.]?\d*)', frase)
+    
+    pedacos = re.findall(r'([a-z1-9á-úç]+)\s*(\d+[\.]?\d*)', frase)
+    
     for item, valor_str in pedacos:
         valor = float(valor_str)
         achou = False
@@ -92,6 +96,7 @@ def processar_texto(frase):
         if not achou:
             res['Ganhos']['Outros_Receita'] = res['Ganhos'].get('Outros_Receita', 0) + valor
             res['Detalhes'].append(f"{item}")
+            
     return res
 
 # --- TELA ---
@@ -107,24 +112,44 @@ with aba1:
         st.error(f"🚨 {STATUS_CONEXAO}")
     else:
         st.success(f"✅ {STATUS_CONEXAO}")
+
+    # --- CAMPO DE TEXTO ---
+    texto = st.text_area("Digite aqui:", key="txt_entrada", placeholder="Ex: urbano 350, almoço 20")
     
-    # CRIA CHAVES DE MEMÓRIA PARA PODER LIMPAR DEPOIS
-    if "texto_input" not in st.session_state: st.session_state.texto_input = ""
+    # --- NOVO SISTEMA DE FOTO (CÂMERA OU ARQUIVO) ---
+    st.write("📸 **Registro do KM (Hodômetro)**")
+    tipo_foto = st.radio("Escolha:", ["Câmera 📷", "Galeria 📂"], horizontal=True, label_visibility="collapsed")
     
-    # Campo de texto vinculado à memória
-    texto = st.text_area("O que rolou?", key="texto_input", placeholder="Ex: urbano 200, boraali 50")
-    # Campo de foto com chave para resetar
-    foto = st.file_uploader("Foto KM", key="foto_input", type=['png', 'jpg', 'jpeg'])
+    foto = None
+    if tipo_foto == "Câmera 📷":
+        foto = st.camera_input("Tire uma foto do painel", key="cam_input")
+    else:
+        foto = st.file_uploader("Escolha a foto", key="file_input", type=['png', 'jpg', 'jpeg'])
     
     if st.button("GRAVAR 🚀", use_container_width=True):
-        if "Erro" in STATUS_CONEXAO:
-            st.error("Sem conexão.")
-        elif not texto and not foto:
-            st.warning("Digite algo!")
+        if not texto and not foto:
+            st.warning("Opa, escreva algo primeiro!")
         else:
             dados = processar_texto(texto)
             km_lido = 0
             
+            # --- TENTATIVA DE LER O KM (OCR MELHORADO) ---
+            if foto:
+                try:
+                    img = PILImage.open(foto)
+                    txt_img = pytesseract.image_to_string(img)
+                    # Limpa pontos (ex: 10.000 vira 10000) e procura numeros
+                    nums_limpos = re.findall(r'\d+', txt_img.replace('.', '').replace(',', ''))
+                    # Filtra numeros provaveis de KM (maior que 500 e menor que 500.000)
+                    nums_validos = [int(n) for n in nums_limpos if 500 < int(n) < 500000]
+                    if nums_validos: 
+                        km_lido = max(nums_validos) # Pega o maior numero achado
+                        st.toast(f"👁️ Li na foto: {km_lido} KM")
+                    else:
+                        st.toast("⚠️ Não consegui ler o KM na foto (tente aproximar mais).")
+                except:
+                    pass
+
             nova = {col: 0 for col in COLUNAS_OFICIAIS}
             nova.update({
                 'Usuario': NOME_USUARIO, 'Data': datetime.now().strftime("%Y-%m-%d"),
@@ -142,33 +167,31 @@ with aba1:
                 conn.update(worksheet=0, data=df_final)
                 
                 st.balloons()
-                st.success("Salvo com Sucesso! Atualizando...")
+                st.success(f"✅ Salvo! KM registrado: {km_lido}")
                 
-                # --- O SEGREDO DO REFRESH ---
-                time.sleep(1.5) # Espera 1.5s pro motorista ler a mensagem
-                st.rerun()      # Recarrega a página (Limpa campos e Atualiza Gráfico)
+                time.sleep(2)
+                st.session_state['txt_entrada'] = "" 
+                st.rerun()
                 
             except Exception as e:
                 st.error(f"Erro ao salvar: {e}")
 
 with aba2:
     if not df_usuario.empty:
-        # Métricas
         g = df_usuario[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().sum()
         d = df_usuario[['Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Outros_Custos']].sum().sum()
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Ganhos", f"R$ {g:,.2f}")
-        c2.metric("Despesas", f"R$ {d:,.2f}")
-        c3.metric("Lucro", f"R$ {g-d:,.2f}")
+        c1.metric("Faturamento", f"R$ {g:,.2f}")
+        c2.metric("Despesas", f"R$ {d:,.2f}", delta_color="inverse")
+        c3.metric("Lucro Líquido", f"R$ {g-d:,.2f}")
         
         st.divider()
+        st.subheader("📋 Últimos Lançamentos")
         
-        # Histórico (Agora mostra o mais recente no topo!)
-        st.write("📋 **Últimos Lançamentos:**")
-        # Inverte a ordem para mostrar o último primeiro
-        df_view = df_usuario.iloc[::-1] 
-        visivel = ['Data', 'Urbano', 'Boraali', 'Energia', 'Detalhes']
-        st.dataframe(df_view[[c for c in visivel if c in df_usuario.columns]].head(10), use_container_width=True)
+        df_view = df_usuario.iloc[::-1]
+        visivel = ['Data', 'Urbano', 'Boraali', 'Energia', 'Outros_Custos', 'KM_Final', 'Detalhes']
+        st.dataframe(df_view[[c for c in visivel if c in df_usuario.columns]].head(15), use_container_width=True)
     else:
-        st.info("Nenhum dado lançado ainda.")
+        st.info("Aguardando lançamentos...")
+
