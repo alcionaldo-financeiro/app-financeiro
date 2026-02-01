@@ -8,59 +8,89 @@ import pytz
 import plotly.express as px
 import plotly.graph_objects as go
 
-# --- 1. CONFIGURAÇÃO E ESTILO ---
+# --- 1. CONFIGURAÇÃO E ESTILO (MOBILE FIRST) ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
+        /* Remove itens padrões do Streamlit para parecer App Nativo */
         #MainMenu, header, footer, .stDeployButton {display: none !important;}
         [data-testid="stToolbar"], [data-testid="stDecoration"] {display: none !important;}
-        .block-container {padding-top: 1rem !important; padding-bottom: 5rem !important;}
         
-        /* Botões */
+        /* Ajuste de Container para Celular (Menos borda branca) */
+        .block-container {
+            padding-top: 1rem !important; 
+            padding-bottom: 3rem !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+        
+        /* Botões Grandes e Fáceis de Tocar (Touch Friendly) */
         div.stButton > button[kind="primary"] {
             background-color: #28a745 !important;
             color: white !important;
             border-radius: 12px !important;
-            height: 3.5rem !important;
+            height: 4rem !important; /* Mais alto para o dedo */
             font-weight: bold !important;
+            font-size: 1.1rem !important;
             width: 100% !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         
-        /* Métricas */
+        /* Cards de Métricas (KPIs) */
         [data-testid="stMetric"] {
             background-color: #ffffff !important;
-            border: 1px solid #cccccc !important;
+            border: 1px solid #e6e6e6 !important;
             padding: 10px !important;
-            border-radius: 10px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            text-align: center; /* Centraliza no mobile */
         }
-        [data-testid="stMetricLabel"] { color: #333333 !important; font-weight: bold !important; font-size: 0.9rem !important; }
-        [data-testid="stMetricValue"] { color: #000000 !important; font-weight: 800 !important; font-size: 1.2rem !important; }
+        [data-testid="stMetricLabel"] { 
+            color: #666666 !important; 
+            font-weight: 600 !important; 
+            font-size: 0.85rem !important; 
+        }
+        [data-testid="stMetricValue"] { 
+            color: #000000 !important; 
+            font-weight: 800 !important; 
+            font-size: 1.1rem !important; /* Ajustado para não quebrar linha */
+        }
         
-        /* Ajuste do Radio para parecer Abas */
+        /* Menu de Navegação (Radio) Adaptável */
         div[role="radiogroup"] {
             display: flex;
+            flex-wrap: wrap; /* Permite quebrar linha em telas muito pequenas */
             justify-content: center;
             width: 100%;
-            background-color: #f0f2f6;
-            padding: 5px;
-            border-radius: 10px;
+            background-color: #f8f9fa;
+            padding: 8px;
+            border-radius: 15px;
             margin-bottom: 20px;
+            border: 1px solid #eee;
         }
         div[role="radiogroup"] label {
-            flex: 1;
+            flex: 1 1 auto; /* Cresce e encolhe conforme necessário */
+            min-width: 120px; /* Largura mínima para o toque */
             text-align: center;
             background-color: white;
             border: 1px solid #ddd;
-            border-radius: 8px;
-            margin: 0 5px;
-            padding: 10px;
+            border-radius: 10px;
+            margin: 4px;
+            padding: 12px;
             font-weight: bold;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
         div[role="radiogroup"] label[data-checked="true"] {
             background-color: #28a745 !important;
             color: white !important;
             border-color: #28a745 !important;
+            box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3);
+        }
+
+        /* Inputs de formulário mais espaçados */
+        .stNumberInput input {
+            padding: 10px;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -73,13 +103,16 @@ COLUNAS_OFICIAIS = ['ID_Unico', 'Status', 'Usuario', 'CPF', 'Data', 'Urbano', 'B
 def format_br(valor):
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
+def format_int_br(valor):
+    """Formata inteiro com ponto de milhar: 5.262"""
+    return f"{int(valor):,}".replace(",", ".")
+
 def limpar_cpf(t):
     if pd.isna(t) or t == "" or t is None: return ""
     s = str(t).split('.')[0]
     s = re.sub(r'\D', '', s)
     return s.zfill(11)
 
-# Função auxiliar para tratar input vazio (None) como 0.0
 def v(valor):
     if valor is None: return 0.0
     return float(valor)
@@ -102,7 +135,7 @@ def salvar_no_banco(df_novo):
     conn.update(worksheet=0, data=df_novo)
     st.cache_data.clear()
 
-# --- 3. LOGIN COM PERSISTÊNCIA ---
+# --- 3. LOGIN ---
 params = st.query_params
 u_url = params.get("user", "")
 c_url = limpar_cpf(params.get("cpf", ""))
@@ -137,34 +170,43 @@ df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) &
 
 nav_opcao = st.radio("", ["📝 LANÇAR", "📊 DASHBOARD"], horizontal=True, label_visibility="collapsed")
 
+# --- FUNÇÃO AUXILIAR PARA LAYOUT DE GRÁFICO MOBILE ---
+def mobile_chart_layout(fig):
+    fig.update_layout(
+        margin=dict(l=10, r=10, t=30, b=10), # Margens mínimas
+        legend=dict(
+            orientation="h", # Legenda Horizontal
+            yanchor="bottom", y=1.02, # Acima do gráfico
+            xanchor="center", x=0.5
+        ),
+        font=dict(size=11) # Fonte legível
+    )
+    return fig
+
 if nav_opcao == "📝 LANÇAR":
     st.subheader(f"Olá, {st.session_state.usuario}")
     data_lanc = st.date_input("Data do Trabalho:", value=HOJE_BR, format="DD/MM/YYYY")
     
-    # --- BLOCO 1: FATURAMENTO ---
-    # value=None deixa o campo "limpo" (placeholder visível). Ao salvar usamos v() para converter em 0.0
-    st.markdown("### 💰 Faturamento (Entradas)")
+    # Inputs organizados em colunas (O Streamlit empilha automaticamente no mobile)
+    st.markdown("### 💰 Faturamento")
     with st.container(border=True):
-        col_rec1, col_rec2 = st.columns(2)
-        v1 = col_rec1.number_input("Urbano (99/Uber)", min_value=0.0, value=None, placeholder="0,00")
-        v2 = col_rec2.number_input("BoraAli", min_value=0.0, value=None, placeholder="0,00")
-        v3 = col_rec1.number_input("app163", min_value=0.0, value=None, placeholder="0,00")
-        v4 = col_rec2.number_input("Outros (Receita)", min_value=0.0, value=None, placeholder="0,00")
+        c1, c2 = st.columns(2)
+        v1 = c1.number_input("Urbano (99/Uber)", min_value=0.0, value=None, placeholder="0,00")
+        v2 = c2.number_input("BoraAli", min_value=0.0, value=None, placeholder="0,00")
+        v3 = c1.number_input("app163", min_value=0.0, value=None, placeholder="0,00")
+        v4 = c2.number_input("Outros (Receita)", min_value=0.0, value=None, placeholder="0,00")
 
-    # --- BLOCO 2: CUSTOS ---
-    st.markdown("### 💸 Custos (Saídas)")
+    st.markdown("### 💸 Custos")
     with st.container(border=True):
-        col_cus1, col_cus2 = st.columns(2)
-        c1 = col_cus1.number_input("Energia", min_value=0.0, value=None, placeholder="0,00")
-        c2 = col_cus2.number_input("Manutenção", min_value=0.0, value=None, placeholder="0,00")
-        c3 = col_cus1.number_input("Seguro", min_value=0.0, value=None, placeholder="0,00")
-        c4 = col_cus2.number_input("Outros Custos (Documento)", min_value=0.0, value=None, placeholder="0,00")
-        c5 = col_cus1.number_input("Aplicativo", min_value=0.0, value=None, placeholder="0,00")
-        c6 = col_cus2.number_input("Alimentação", min_value=0.0, value=None, placeholder="0,00")
+        d1, d2 = st.columns(2)
+        cust_e = d1.number_input("Energia", min_value=0.0, value=None, placeholder="0,00")
+        cust_m = d2.number_input("Manutenção", min_value=0.0, value=None, placeholder="0,00")
+        cust_s = d1.number_input("Seguro", min_value=0.0, value=None, placeholder="0,00")
+        cust_o = d2.number_input("Documento/Outros", min_value=0.0, value=None, placeholder="0,00")
+        cust_a = d1.number_input("Apps (Assinatura)", min_value=0.0, value=None, placeholder="0,00")
+        cust_f = d2.number_input("Alimentação", min_value=0.0, value=None, placeholder="0,00")
     
-    st.subheader("🚗 KM")
-    
-    # Lógica do Último KM (Mantida e Validada)
+    st.subheader("🚗 Hodômetro")
     u_km = 0
     if not df_user.empty:
         try:
@@ -174,13 +216,11 @@ if nav_opcao == "📝 LANÇAR":
                 u_km = int(df_km_valid.iloc[0]['KM_Final'])
         except: u_km = 0
 
-    col_km1, col_km2 = st.columns(2)
-    # KM não pode ser None, pois precisa sugerir o anterior
-    k_ini = col_km1.number_input("KM Inicial", value=u_km)
-    k_fim = col_km2.number_input("KM Final", min_value=0, value=None, placeholder="Digite o KM final...")
+    k1, k2 = st.columns(2)
+    k_ini = k1.number_input("KM Inicial", value=u_km)
+    k_fim = k2.number_input("KM Final", min_value=0, value=None, placeholder="Digite...")
 
-    if st.button("SALVAR AGORA ✅", type="primary"):
-        # Tratamento: se k_fim for None ou 0, assume k_ini para não zerar o KM rodado
+    if st.button("SALVAR LANÇAMENTO ✅", type="primary"):
         km_f_real = float(k_fim) if k_fim and float(k_fim) > 0 else float(k_ini)
         
         nova = {col: 0 for col in COLUNAS_OFICIAIS}
@@ -191,32 +231,32 @@ if nav_opcao == "📝 LANÇAR":
             'CPF': st.session_state.cpf_usuario, 
             'Data': data_lanc.strftime("%Y-%m-%d"), 
             'Urbano': v(v1), 'Boraali': v(v2), 'app163': v(v3), 'Outros_Receita': v(v4), 
-            'Energia': v(c1), 'Manuten': v(c2), 'Seguro': v(c3), 'Outros_Custos': v(c4), 
-            'Aplicativo': v(c5), 'Alimentacao': v(c6), 
+            'Energia': v(cust_e), 'Manuten': v(cust_m), 'Seguro': v(cust_s), 
+            'Outros_Custos': v(cust_o), 'Aplicativo': v(cust_a), 'Alimentacao': v(cust_f), 
             'KM_Inicial': float(k_ini), 'KM_Final': km_f_real
         })
         salvar_no_banco(pd.concat([df_total, pd.DataFrame([nova])], ignore_index=True))
-        st.success("Salvo!"); time.sleep(1); st.rerun()
+        st.success("Salvo com sucesso!"); time.sleep(1); st.rerun()
 
 elif nav_opcao == "📊 DASHBOARD":
-    if df_user.empty: st.info("Sem dados até hoje.")
+    if df_user.empty: st.info("Sem dados.")
     else:
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         
         # FILTROS
-        st.markdown("### 🔍 Filtros")
-        f_dia = st.date_input("Filtrar Dia Específico", value=None, format="DD/MM/YYYY")
-        col_f1, col_f2 = st.columns(2)
-        anos = ["Todos"] + sorted(df_bi['Data'].dt.year.dropna().unique().astype(int).astype(str).tolist(), reverse=True)
-        sel_ano = col_f1.selectbox("Ano", anos)
-        meses_pt = ["Todos","Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
-        sel_mes = col_f2.selectbox("Mês", meses_pt)
+        with st.expander("🔍 Filtros (Toque para abrir)", expanded=True):
+            f_dia = st.date_input("Dia Específico", value=None, format="DD/MM/YYYY")
+            fc1, fc2 = st.columns(2)
+            anos = ["Todos"] + sorted(df_bi['Data'].dt.year.dropna().unique().astype(int).astype(str).tolist(), reverse=True)
+            sel_ano = fc1.selectbox("Ano", anos)
+            meses = ["Todos","Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+            sel_mes = fc2.selectbox("Mês", meses)
         
         # APLICAÇÃO DOS FILTROS
         df_f = df_bi.copy()
         if f_dia: df_f = df_f[df_f['Data'].dt.date == f_dia]
         if sel_ano != "Todos": df_f = df_f[df_f['Data'].dt.year == int(sel_ano)]
-        if sel_mes != "Todos": df_f = df_f[df_f['Data'].dt.month == meses_pt.index(sel_mes)]
+        if sel_mes != "Todos": df_f = df_f[df_f['Data'].dt.month == meses.index(sel_mes)]
 
         # CÁLCULOS
         df_f['Receita'] = df_f[['Urbano','Boraali','app163','Outros_Receita']].sum(axis=1)
@@ -224,99 +264,85 @@ elif nav_opcao == "📊 DASHBOARD":
         df_f['Km rodados'] = (df_f['KM_Final'] - df_f['KM_Inicial']).clip(lower=0)
         df_f['Lucro/prejuizo'] = df_f['Receita'] - df_f['Custos']
         
-        # Evita divisão por zero
-        df_f['Lucro/km'] = df_f.apply(lambda r: r['Lucro/prejuizo']/r['Km rodados'] if r['Km rodados'] > 0 else 0, axis=1)
-        df_f['Receita/R$/KM'] = df_f.apply(lambda r: r['Receita']/r['Km rodados'] if r['Km rodados'] > 0 else 0, axis=1)
-        
-        # 1. KPIs
+        # TOTAIS
         tr, tc, tl, tk = df_f['Receita'].sum(), df_f['Custos'].sum(), df_f['Lucro/prejuizo'].sum(), df_f['Km rodados'].sum()
+        
+        # KPI GRID (3 COLUNAS É APERTADO NO MOBILE, MAS STREAMLIT AJUSTA)
+        # Vamos usar CSS para garantir que não quebre
+        st.markdown("#### Resumo Financeiro")
         m1, m2, m3 = st.columns(3)
-        m1.metric("Faturamento Total", format_br(tr))
-        m2.metric("Lucro Líquido", format_br(tl))
-        m3.metric("Custos Totais", format_br(tc))
+        m1.metric("Faturamento", format_br(tr))
+        m2.metric("Lucro Líq.", format_br(tl))
+        m3.metric("Custos", format_br(tc))
+        
         m4, m5, m6 = st.columns(3)
-        m4.metric("KM Rodado", f"{tk:,.0f} km")
-        m5.metric("Faturamento/KM", format_br(tr/tk if tk > 0 else 0)) # MUDANÇA SOLICITADA
+        m4.metric("KM Total", f"{format_int_br(tk)}")
+        m5.metric("Fat/KM", format_br(tr/tk if tk > 0 else 0)) 
         m6.metric("Lucro/KM", format_br(tl/tk if tk > 0 else 0))
 
+        # TABELA (Scroll Horizontal Automático)
         st.divider()
-        st.markdown("### 📈 Análise Gráfica")
-
-        # Preparação dos dados temporais (Ordenados)
-        df_graph = df_f.sort_values('Data')
-        df_graph['Dia'] = df_graph['Data'].dt.strftime('%d/%m')
-
-        # G1: Faturamento por Aplicativo
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            st.markdown("##### 📱 Faturamento por App")
-            apps_sum = df_f[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().reset_index()
-            apps_sum.columns = ['App', 'Total']
-            # Remove zeros para limpar gráfico
-            apps_sum = apps_sum[apps_sum['Total'] > 0]
-            if not apps_sum.empty:
-                fig_apps = px.bar(apps_sum, x='Total', y='App', orientation='h', text_auto=True, color='App')
-                st.plotly_chart(fig_apps, use_container_width=True)
-            else: st.caption("Sem dados de receita.")
-
-        # G2: Custos por Tipo
-        with col_g2:
-            st.markdown("##### 💸 Distribuição de Custos")
-            custos_p = {'Energia': df_f['Energia'].sum(), 'Manutenção': df_f['Manuten'].sum(), 'Seguro': df_f['Seguro'].sum(), 'Alimentação': df_f['Alimentacao'].sum(), 'Outros': df_f['Outros_Custos'].sum(), 'Apps': df_f['Aplicativo'].sum()}
-            df_custos = pd.DataFrame(list(custos_p.items()), columns=['Tipo', 'Valor'])
-            df_custos = df_custos[df_custos['Valor'] > 0]
-            if not df_custos.empty:
-                fig_pizza = px.pie(df_custos, values='Valor', names='Tipo', hole=0.4)
-                st.plotly_chart(fig_pizza, use_container_width=True)
-            else: st.caption("Sem dados de custo.")
-
-        # G3: Evolução Financeira (Faturamento x Lucro)
-        st.markdown("##### 📊 Faturamento vs Lucro (Por Período)")
-        if not df_graph.empty:
-            fig_evol = px.bar(df_graph, x='Dia', y=['Receita', 'Lucro/prejuizo'], barmode='group',
-                             color_discrete_map={'Receita': '#28a745', 'Lucro/prejuizo': '#007bff'})
-            st.plotly_chart(fig_evol, use_container_width=True)
-
-        # G4: KM Rodados
-        col_g3, col_g4 = st.columns(2)
-        with col_g3:
-            st.markdown("##### 🚗 KM Rodados (Por Período)")
-            if not df_graph.empty:
-                fig_km = px.bar(df_graph, x='Dia', y='Km rodados', color_discrete_sequence=['#ffc107'])
-                st.plotly_chart(fig_km, use_container_width=True)
-        
-        # G5: Eficiência (Fat/KM e Lucro/KM)
-        with col_g4:
-            st.markdown("##### ⚡ Eficiência por KM (Por Período)")
-            if not df_graph.empty:
-                fig_ef = px.line(df_graph, x='Dia', y=['Receita/R$/KM', 'Lucro/km'], markers=True,
-                                color_discrete_map={'Receita/R$/KM': '#17a2b8', 'Lucro/km': '#6c757d'})
-                st.plotly_chart(fig_ef, use_container_width=True)
-
-        # TABELA
-        st.divider()
-        st.markdown("### 📋 Lançamentos Detalhados")
+        st.markdown("#### 📋 Histórico")
         df_ex = df_f.copy()
-        df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m/%Y')
-        df_ex = df_ex.rename(columns={'Outros_Receita':'Outros (Rec)', 'Outros_Custos':'Documento', 'Alimentacao':'Alimentação', 'KM_Inicial':'KM Inicial', 'KM_Final':'KM final'})
+        df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m') # Encurtado para mobile
+        cols_mob = ['Data', 'Receita', 'Custos', 'Lucro/prejuizo', 'Km rodados', 'ID_Unico']
         
-        cols_final = [
-            'Data', 'Usuario', 'Receita', 'Urbano', 'Boraali', 'app163', 
-            'Outros (Rec)', 'Custos', 'Energia', 'Manuten', 'Seguro', 
-            'Documento', 'Aplicativo', 'Alimentação', 'KM Inicial', 
-            'KM final', 'Km rodados', 'Lucro/prejuizo', 'Lucro/km', 
-            'Receita/R$/KM', 'ID_Unico'
-        ]
-        st.dataframe(df_ex[cols_final], use_container_width=True, height=350)
+        st.dataframe(
+            df_ex[cols_mob].rename(columns={'Lucro/prejuizo':'Lucro', 'Km rodados':'KM'}), 
+            use_container_width=True, 
+            height=300,
+            hide_index=True
+        )
 
         with st.expander("🗑️ Excluir lançamento"):
-            item_ex = st.selectbox("Selecione pelo ID", df_f['ID_Unico'].tolist())
-            if st.button("CONFIRMAR EXCLUSÃO"):
+            item_ex = st.selectbox("ID para excluir", df_f['ID_Unico'].tolist())
+            if st.button("EXCLUIR"):
                 df_total.loc[df_total['ID_Unico'] == item_ex, 'Status'] = 'Lixeira'
                 salvar_no_banco(df_total)
                 st.rerun()
 
+        # GRÁFICOS (Legends no topo para economizar largura)
+        st.divider()
+        st.markdown("#### 📈 Gráficos")
+        
+        df_graph = df_f.sort_values('Data')
+        df_graph['Dia'] = df_graph['Data'].dt.strftime('%d/%m')
+
+        # G1
+        st.caption("Faturamento por Aplicativo")
+        apps_sum = df_f[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().reset_index()
+        apps_sum.columns = ['App', 'Total']
+        apps_sum = apps_sum[apps_sum['Total'] > 0]
+        if not apps_sum.empty:
+            fig_apps = px.bar(apps_sum, x='Total', y='App', orientation='h', text_auto=True, color='App')
+            st.plotly_chart(mobile_chart_layout(fig_apps), use_container_width=True)
+
+        # G2
+        st.caption("Share (%) Diário")
+        if not df_graph.empty:
+            df_melt = df_graph.melt(id_vars=['Dia'], value_vars=['Urbano', 'Boraali', 'app163', 'Outros_Receita'], var_name='App', value_name='Fat')
+            df_melt = df_melt[df_melt['Fat'] > 0]
+            dt = df_melt.groupby('Dia')['Fat'].transform('sum')
+            df_melt['Pct'] = (df_melt['Fat']/dt*100).fillna(0)
+            df_melt['Txt'] = df_melt['Pct'].apply(lambda x: f"{x:.0f}%")
+            
+            fig_share = px.bar(df_melt, x='Dia', y='Pct', color='App', text='Txt')
+            st.plotly_chart(mobile_chart_layout(fig_share), use_container_width=True)
+
+        # G3
+        st.caption("Faturamento vs Lucro")
+        if not df_graph.empty:
+            fig_ev = px.bar(df_graph, x='Dia', y=['Receita', 'Lucro/prejuizo'], barmode='group', text_auto='.2s',
+                           color_discrete_map={'Receita': '#28a745', 'Lucro/prejuizo': '#007bff'})
+            st.plotly_chart(mobile_chart_layout(fig_ev), use_container_width=True)
+            
+        # G4
+        st.caption("Eficiência (R$/KM)")
+        if not df_graph.empty:
+            fig_ef = px.line(df_graph, x='Dia', y=['Receita/R$/KM', 'Lucro/km'], markers=True)
+            st.plotly_chart(mobile_chart_layout(fig_ef), use_container_width=True)
+
 st.divider()
-if st.button("Sair"): 
+if st.button("Sair da Conta"): 
     st.session_state.autenticado = False
     st.query_params.clear(); st.rerun()
