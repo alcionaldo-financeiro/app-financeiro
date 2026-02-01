@@ -164,7 +164,21 @@ if nav_opcao == "📝 LANÇAR":
         c6 = col_cus2.number_input("Alimentação", min_value=0.0)
     
     st.subheader("🚗 KM")
-    u_km = int(df_user['KM_Final'].max()) if not df_user.empty else 0
+    
+    # Lógica Ajustada: Busca o último KM Final válido (>0) pela DATA mais recente
+    u_km = 0
+    if not df_user.empty:
+        try:
+            # Ordena por data decrescente
+            df_km_valid = df_user.sort_values(by='Data', ascending=False)
+            # Filtra onde KM > 0 para ignorar dias zerados/futuros
+            df_km_valid = df_km_valid[df_km_valid['KM_Final'] > 0]
+            
+            if not df_km_valid.empty:
+                u_km = int(df_km_valid.iloc[0]['KM_Final'])
+        except:
+            u_km = 0
+
     col_km1, col_km2 = st.columns(2)
     k_ini = col_km1.number_input("KM Inicial", value=u_km)
     k_fim = col_km2.number_input("KM Final", min_value=0)
