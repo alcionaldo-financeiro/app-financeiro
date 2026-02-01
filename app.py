@@ -68,7 +68,7 @@ st.markdown("""
         
         /* --- AJUSTES TABELA (COMPACTA) --- */
         .stDataFrame { width: 100% !important; }
-        [data-testid="stDataFrame"] td { white-space: nowrap !important; } /* Evita quebra de linha feia */
+        [data-testid="stDataFrame"] td { white-space: nowrap !important; } 
         
         @keyframes fadeIn {
             0% { opacity: 0; transform: translateY(20px); }
@@ -140,12 +140,12 @@ if not st.session_state.autenticado:
         """, unsafe_allow_html=True)
         
         with st.container():
-            n_in = st.text_input("Nome do Motorista", placeholder="Como você quer ser chamado?")
-            c_in = st.text_input("CPF de Acesso", placeholder="Apenas números", max_chars=11)
+            n_in = st.text_input("Nome do Motorista", placeholder="Como você quer ser chamado?", key="login_nome")
+            c_in = st.text_input("CPF de Acesso", placeholder="Apenas números", max_chars=11, key="login_cpf")
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            if st.button("ACESSAR SISTEMA", type="primary"):
+            if st.button("ACESSAR SISTEMA", type="primary", key="btn_login"):
                 c_l = limpar_cpf(c_in)
                 if n_in and len(c_l) == 11:
                     st.session_state.update({'usuario': n_in, 'cpf_usuario': c_l, 'autenticado': True})
@@ -160,7 +160,7 @@ df_total = carregar_dados()
 df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) & 
                    (df_total['Status'] != 'Lixeira')].copy()
 
-nav_opcao = st.radio("", ["📝 LANÇAR", "📊 DASHBOARD"], horizontal=True, label_visibility="collapsed")
+nav_opcao = st.radio("", ["📝 LANÇAR", "📊 DASHBOARD"], horizontal=True, label_visibility="collapsed", key="nav_main")
 
 def configurar_grafico(fig):
     fig.update_layout(
@@ -178,25 +178,25 @@ if nav_opcao == "📝 LANÇAR":
     st.markdown(f"<h3 style='margin-bottom: 5px;'>Olá, {st.session_state.usuario} 👋</h3>", unsafe_allow_html=True)
     st.caption(f"Data de hoje: {HOJE_BR.strftime('%d/%m/%Y')}")
     
-    data_lanc = st.date_input("Data do Lançamento:", value=HOJE_BR, format="DD/MM/YYYY", label_visibility="collapsed")
+    data_lanc = st.date_input("Data do Lançamento:", value=HOJE_BR, format="DD/MM/YYYY", label_visibility="collapsed", key="data_lanc_input")
     
     st.markdown("##### 💰 Ganhos do Dia")
     with st.container(border=True):
         c1, c2 = st.columns(2)
-        v1 = c1.number_input("Urbano (99/Uber)", min_value=0.0, value=None, placeholder="R$ 0,00")
-        v2 = c2.number_input("BoraAli", min_value=0.0, value=None, placeholder="R$ 0,00")
-        v3 = c1.number_input("app163", min_value=0.0, value=None, placeholder="R$ 0,00")
-        v4 = c2.number_input("Outros", min_value=0.0, value=None, placeholder="R$ 0,00")
+        v1 = c1.number_input("Urbano (99/Uber)", min_value=0.0, value=None, placeholder="R$ 0,00", key="rec_urbano")
+        v2 = c2.number_input("BoraAli", min_value=0.0, value=None, placeholder="R$ 0,00", key="rec_boraali")
+        v3 = c1.number_input("app163", min_value=0.0, value=None, placeholder="R$ 0,00", key="rec_app163")
+        v4 = c2.number_input("Outros", min_value=0.0, value=None, placeholder="R$ 0,00", key="rec_outros")
 
     st.markdown("##### 💸 Custos do Dia")
     with st.container(border=True):
         d1, d2 = st.columns(2)
-        cust_e = d1.number_input("Combustível/Energia", min_value=0.0, value=None, placeholder="R$ 0,00")
-        cust_m = d2.number_input("Manutenção", min_value=0.0, value=None, placeholder="R$ 0,00")
-        cust_s = d1.number_input("Seguro", min_value=0.0, value=None, placeholder="R$ 0,00")
-        cust_o = d2.number_input("Documentos/Multas", min_value=0.0, value=None, placeholder="R$ 0,00")
-        cust_a = d1.number_input("Mensalidades Apps", min_value=0.0, value=None, placeholder="R$ 0,00")
-        cust_f = d2.number_input("Outros", min_value=0.0, value=None, placeholder="R$ 0,00")
+        cust_e = d1.number_input("Combustível/Energia", min_value=0.0, value=None, placeholder="R$ 0,00", key="desp_energia")
+        cust_m = d2.number_input("Manutenção", min_value=0.0, value=None, placeholder="R$ 0,00", key="desp_manut")
+        cust_s = d1.number_input("Seguro", min_value=0.0, value=None, placeholder="R$ 0,00", key="desp_seguro")
+        cust_o = d2.number_input("Documentos/Multas", min_value=0.0, value=None, placeholder="R$ 0,00", key="desp_docs")
+        cust_a = d1.number_input("Mensalidades Apps", min_value=0.0, value=None, placeholder="R$ 0,00", key="desp_apps")
+        cust_f = d2.number_input("Outros", min_value=0.0, value=None, placeholder="R$ 0,00", key="desp_outros_f")
     
     st.markdown("##### 🚗 Hodômetro")
     u_km = 0
@@ -209,11 +209,11 @@ if nav_opcao == "📝 LANÇAR":
 
     with st.container(border=True):
         k1, k2 = st.columns(2)
-        k_ini = k1.number_input("KM Inicial", value=u_km)
-        k_fim = k2.number_input("KM Final", min_value=0, value=None, placeholder="Ex: 125800")
+        k_ini = k1.number_input("KM Inicial", value=u_km, key="km_inicial_input")
+        k_fim = k2.number_input("KM Final", min_value=0, value=None, placeholder="Ex: 125800", key="km_final_input")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("SALVAR REGISTRO", type="primary"):
+    if st.button("SALVAR REGISTRO", type="primary", key="btn_salvar"):
         km_f_real = float(k_fim) if k_fim and float(k_fim) > 0 else float(k_ini)
         nova = {col: 0 for col in COLUNAS_OFICIAIS}
         nova.update({
@@ -233,21 +233,18 @@ elif nav_opcao == "📊 DASHBOARD":
     else:
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         
-        # --- FILTRO INTELIGENTE (ANTI-FUTURO) ---
-        # 1. Encontra datas que são <= HOJE para definir o padrão
+        # --- FILTRO INTELIGENTE ---
         df_passado = df_bi[df_bi['Data'].dt.date <= HOJE_BR]
-        
         if not df_passado.empty:
             ultima_data_valida = df_passado['Data'].max()
             ano_padrao = ultima_data_valida.year
             mes_padrao = ultima_data_valida.month
         else:
-            # Se só tiver futuro ou estiver vazio, usa hoje
             ano_padrao = HOJE_BR.year
             mes_padrao = HOJE_BR.month
             
         with st.expander("📅 Filtrar Período", expanded=False):
-            f_dia = st.date_input("Dia Específico", value=None, format="DD/MM/YYYY")
+            f_dia = st.date_input("Dia Específico", value=None, format="DD/MM/YYYY", key="filtro_dia")
             fc1, fc2 = st.columns(2)
             
             anos_disp = sorted(df_bi['Data'].dt.year.dropna().unique().astype(int).astype(str).tolist(), reverse=True)
@@ -255,13 +252,12 @@ elif nav_opcao == "📊 DASHBOARD":
             
             meses_map = {1:"Janeiro", 2:"Fevereiro", 3:"Março", 4:"Abril", 5:"Maio", 6:"Junho", 7:"Julho", 8:"Agosto", 9:"Setembro", 10:"Outubro", 11:"Novembro", 12:"Dezembro"}
             
-            # Define índices baseados na DATA VÁLIDA (não na data futura de erro)
             try: idx_ano = anos_disp.index(str(ano_padrao))
             except: idx_ano = 0
             idx_mes = mes_padrao - 1
             
-            sel_ano = fc1.selectbox("Ano", ["Todos"] + anos_disp, index=idx_ano+1 if "Todos" in ["Todos"]+anos_disp else 0)
-            sel_mes = fc2.selectbox("Mês", ["Todos"] + list(meses_map.values()), index=idx_mes+1)
+            sel_ano = fc1.selectbox("Ano", ["Todos"] + anos_disp, index=idx_ano+1 if "Todos" in ["Todos"]+anos_disp else 0, key="filtro_ano")
+            sel_mes = fc2.selectbox("Mês", ["Todos"] + list(meses_map.values()), index=idx_mes+1, key="filtro_mes")
         
         # Aplica Filtros
         df_f = df_bi.copy()
@@ -273,13 +269,11 @@ elif nav_opcao == "📊 DASHBOARD":
                 m_num = list(meses_map.keys())[list(meses_map.values()).index(sel_mes)]
                 df_f = df_f[df_f['Data'].dt.month == m_num]
 
-        # Cálculos de Colunas Auxiliares para Exibição
+        # Cálculos
         df_f['Receita'] = df_f[['Urbano','Boraali','app163','Outros_Receita']].sum(axis=1)
         df_f['Custos'] = df_f[['Energia','Manuten','Seguro','Outros_Custos','Aplicativo','Alimentacao']].sum(axis=1)
         df_f['Lucro'] = df_f['Receita'] - df_f['Custos']
         df_f['Km rodados'] = (df_f['KM_Final'] - df_f['KM_Inicial']).clip(lower=0)
-        
-        # Totais
         tr, tc, tl, tk = df_f['Receita'].sum(), df_f['Custos'].sum(), df_f['Lucro'].sum(), df_f['Km rodados'].sum()
         
         st.markdown("#### 💵 Performance Financeira")
@@ -297,19 +291,15 @@ elif nav_opcao == "📊 DASHBOARD":
         st.markdown("#### 📋 Extrato Completo")
         st.caption("↔️ Arraste para o lado para ver mais detalhes")
         
-        # PREPARAÇÃO DA TABELA REORGANIZADA
         df_ex = df_f.copy()
-        df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m') # Encurtado para caber melhor
+        df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m')
         
-        # Ordem Solicitada: Data -> Totais -> Ganhos -> Custos -> KM -> Motorista
         cols_ordered = [
-            'Data', 'Receita', 'Custos', 'Lucro', # Principais
-            'Urbano', 'Boraali', 'app163', 'Outros_Receita', # Ganhos
-            'Energia', 'Manuten', 'Seguro', 'Outros_Custos', 'Aplicativo', 'Alimentacao', # Custos
+            'Data', 'Receita', 'Custos', 'Lucro', 
+            'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
+            'Energia', 'Manuten', 'Seguro', 'Outros_Custos', 'Aplicativo', 'Alimentacao', 
             'KM_Inicial', 'KM_Final', 'Usuario', 'ID_Unico'
         ]
-        
-        # Filtra apenas colunas que existem no DF
         cols_final = [c for c in cols_ordered if c in df_ex.columns]
         
         st.dataframe(
@@ -320,8 +310,8 @@ elif nav_opcao == "📊 DASHBOARD":
             column_config={
                 "ID_Unico": st.column_config.TextColumn("ID", width="small"),
                 "Data": st.column_config.TextColumn("Data", width="small"),
-                "Receita": st.column_config.NumberColumn("Faturamento", format="R$ %.2f", width="small"),
-                "Custos": st.column_config.NumberColumn("Custos", format="R$ %.2f", width="small"),
+                "Receita": st.column_config.NumberColumn("Faturamento Total", format="R$ %.2f", width="small"),
+                "Custos": st.column_config.NumberColumn("Custos Totais", format="R$ %.2f", width="small"),
                 "Lucro": st.column_config.NumberColumn("Lucro", format="R$ %.2f", width="small"),
                 "Urbano": st.column_config.NumberColumn("Urbano", format="%.0f", width="small"),
                 "Boraali": st.column_config.NumberColumn("BoraAli", format="%.0f", width="small"),
@@ -337,8 +327,8 @@ elif nav_opcao == "📊 DASHBOARD":
         with st.expander("🗑️ Excluir um Registro"):
             ids = df_f['ID_Unico'].tolist()
             if ids:
-                item_ex = st.selectbox("Selecione o ID", ids)
-                if st.button("Confirmar Exclusão"):
+                item_ex = st.selectbox("Selecione o ID", ids, key="delete_select")
+                if st.button("Confirmar Exclusão", key="btn_delete"):
                     df_total.loc[df_total['ID_Unico'] == item_ex, 'Status'] = 'Lixeira'
                     salvar_no_banco(df_total)
                     st.rerun()
@@ -370,7 +360,7 @@ elif nav_opcao == "📊 DASHBOARD":
                             color_discrete_map={'Fat_KM': '#17a2b8', 'Lucro_KM': '#6c757d'})
             st.plotly_chart(configurar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
 
-st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v13</div><br>", unsafe_allow_html=True)
+st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v15</div><br>", unsafe_allow_html=True)
 if st.button("Sair"): 
     st.session_state.autenticado = False
     st.query_params.clear(); st.rerun()
