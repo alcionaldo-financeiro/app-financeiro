@@ -36,7 +36,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. FUNÇÕES DE TRATAMENTO ---
+# --- 2. FUNÇÕES DE APOIO ---
 FUSO_BR = pytz.timezone('America/Sao_Paulo')
 COLUNAS_OFICIAIS = [
     'ID_Unico', 'Status', 'Usuario', 'CPF', 'Data', 
@@ -74,7 +74,7 @@ def carregar_dados():
         return df
     except: return pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
-# --- 3. SISTEMA DE LOGIN ---
+# --- 3. LOGIN ---
 if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
 
 params = st.query_params
@@ -82,36 +82,33 @@ q_nome = params.get("n", "")
 q_cpf = limpar_cpf(params.get("c", ""))
 
 if not st.session_state['autenticado']:
-    # TENTATIVA DE LOGIN VIA URL
     if q_nome and len(q_cpf) == 11:
         st.session_state.update({'usuario': q_nome.lower(), 'cpf_usuario': q_cpf, 'autenticado': True})
         st.rerun()
     
-    # SE FALHAR O LINK, MOSTRA TELA DE LOGIN (EVITA TELA PRETA)
     st.title("💎 BYD Pro")
-    st.markdown("### Bem-vindo! Identifique-se:")
-    n_in = st.text_input("Nome Completo:")
-    c_in = st.text_input("CPF (Somente números):", max_chars=11)
-    if st.button("ACESSAR SISTEMA 🚀", type="primary"):
+    n_in = st.text_input("Seu Nome:")
+    c_in = st.text_input("Seu CPF:", max_chars=11)
+    if st.button("ENTRAR ✅", type="primary"):
         c_l = limpar_cpf(c_in)
         if n_in and len(c_l) == 11:
             st.session_state.update({'usuario': n_in.lower(), 'cpf_usuario': c_l, 'autenticado': True})
             st.rerun()
-        else: st.error("⚠️ Preencha os dados corretamente.")
     st.stop()
 
-# --- 4. APP LOGADO ---
+# --- 4. SISTEMA ---
 CPF_LOGADO = st.session_state['cpf_usuario']
 df_total = carregar_dados()
 df_user = df_total[(df_total['CPF'] == CPF_LOGADO) & (df_total['Status'] != 'Lixeira')].copy()
 
-aba1, aba2 = st.tabs(["📝 LANÇAR", "📊 DASHBOARD"])
+# AQUI ESTÁ O SEGREDO: Usamos 'key' para travar a aba
+aba = st.tabs(["📝 LANÇAR DADOS", "📊 DASHBOARD"], key="aba_principal")
 
-with aba1:
-    # Opção discreta
+# --- ABA DE LANÇAMENTO ---
+with aba[0]:
     with st.expander("⚙️ Importar Excel"):
-        arq = st.file_uploader("Selecione o arquivo .xlsx", type=["xlsx"])
-        if arq and st.button("Processar"):
+        arq = st.file_uploader("Suba o arquivo .xlsx", type=["xlsx"])
+        if arq and st.button("Processar Importação"):
             df_ex = pd.read_excel(arq)
             mapping = {'Data':'Data','Urbano':'Urbano','Boraali':'Boraali','app163':'app163','Outros':'Outros_Receita','Energia':'Energia','Manuten':'Manuten','Seguro':'Seguro','Documento':'Outros_Custos','Aplicativo':'Aplicativo','KM Inicial':'KM_Inicial','KM final':'KM_Final'}
             novas = []
@@ -130,23 +127,23 @@ with aba1:
             conn.update(worksheet=0, data=pd.concat([carregar_dados(), pd.DataFrame(novas)], ignore_index=True))
             st.cache_data.clear(); st.success("Importado!"); time.sleep(1); st.rerun()
 
-    st.markdown("#### 💰 Receitas")
-    v1 = st.number_input("99 / Uber", min_value=0.0, step=10.0)
-    v2 = st.number_input("BoraAli", min_value=0.0, step=10.0)
-    v3 = st.number_input("App 163", min_value=0.0, step=10.0)
-    v4 = st.number_input("Particular / Outros", min_value=0.0, step=10.0)
+    st.markdown("### 💰 Receitas")
+    v1 = st.number_input("99 / Uber (R$)", min_value=0.0, step=10.0)
+    v2 = st.number_input("BoraAli (R$)", min_value=0.0, step=10.0)
+    v3 = st.number_input("App 163 (R$)", min_value=0.0, step=10.0)
+    v4 = st.number_input("Particular / Outros (R$)", min_value=0.0, step=10.0)
 
-    st.markdown("#### 💸 Custos")
-    c1 = st.number_input("Energia / Combustível", min_value=0.0, step=5.0)
-    c2 = st.number_input("Manutenção / Lavagem", min_value=0.0, step=5.0)
-    c3 = st.number_input("Seguro / Docs", min_value=0.0, step=5.0)
-    c4 = st.number_input("Alimentação", min_value=0.0, step=5.0)
-    c5 = st.number_input("Internet / Apps", min_value=0.0, step=5.0)
-    c6 = st.number_input("Outros Custos", min_value=0.0, step=5.0)
+    st.markdown("### 💸 Custos")
+    c1 = st.number_input("Energia / Combustível (R$)", min_value=0.0, step=5.0)
+    c2 = st.number_input("Manutenção / Lavagem (R$)", min_value=0.0, step=5.0)
+    c3 = st.number_input("Seguro / Docs (R$)", min_value=0.0, step=5.0)
+    c4 = st.number_input("Alimentação (R$)", min_value=0.0, step=5.0)
+    c5 = st.number_input("Internet / Apps (R$)", min_value=0.0, step=5.0)
+    c6 = st.number_input("Outros Custos (R$)", min_value=0.0, step=5.0)
 
-    st.markdown("#### 🚗 KM Rodado")
+    st.markdown("### 🚗 KM do Veículo")
     u_km = int(df_user['KM_Final'].max()) if not df_user.empty else 0
-    k_ini = st.number_input("KM Inicial (Editável)", value=u_km)
+    k_ini = st.number_input("KM Inicial (Confirme ou edite)", value=u_km)
     k_fim = st.number_input("KM Final Atual", min_value=0)
     
     if st.button("SALVAR AGORA ✅", type="primary"):
@@ -160,64 +157,71 @@ with aba1:
         })
         conn = st.connection("gsheets", type=GSheetsConnection)
         conn.update(worksheet=0, data=pd.concat([carregar_dados(), pd.DataFrame([nova])], ignore_index=True))
-        st.cache_data.clear(); st.success("Salvo!"); time.sleep(1); st.rerun()
+        st.cache_data.clear(); st.success("Salvo com sucesso!"); time.sleep(1); st.rerun()
 
-with aba2:
-    if df_user.empty: st.info("Sem dados.")
+# --- ABA DE DASHBOARD ---
+with aba[1]:
+    if df_user.empty: st.info("Sem dados para exibir.")
     else:
+        # Preparação
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         df_bi['Rec'] = df_bi[['Urbano','Boraali','app163','Outros_Receita']].sum(axis=1)
         df_bi['Cus'] = df_bi[['Energia','Manuten','Seguro','Aplicativo','Alimentacao','Outros_Custos']].sum(axis=1)
         df_bi['Lucro'] = df_bi['Rec'] - df_bi['Cus']
         df_bi['KMR'] = (df_bi['KM_Final'] - df_bi['KM_Inicial']).clip(lower=0)
         
-        # FILTROS SEM ERRO
-        st.markdown("### 🔍 Filtros")
-        f_dia = st.date_input("Filtrar por Dia", value=None)
+        # Filtros em Português
+        st.markdown("### 🔍 Filtros de Visualização")
         
-        anos_validos = df_bi['Data'].dt.year.dropna().unique()
-        anos = ["Todos"] + sorted([str(int(y)) for y in anos_validos], reverse=True)
-        f_ano = st.selectbox("Filtrar por Ano", anos)
+        anos_disponiveis = df_bi['Data'].dt.year.dropna().unique()
+        lista_anos = ["Todos"] + sorted([str(int(y)) for y in anos_disponiveis], reverse=True)
+        sel_ano = st.selectbox("Escolha o Ano", lista_anos, key="f_ano")
         
-        meses = ["Todos","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-        f_mes = st.selectbox("Filtrar por Mês", meses)
+        meses_pt = ["Todos", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        sel_mes = st.selectbox("Escolha o Mês", meses_pt, key="f_mes")
+        
+        sel_dia = st.date_input("Filtrar por um Dia específico", value=None, key="f_dia")
 
+        # Aplicar Filtros
         df_f = df_bi.copy()
-        if f_dia: df_f = df_f[df_f['Data'].dt.date == f_dia]
-        if f_ano != "Todos": df_f = df_f[df_f['Data'].dt.year == int(f_ano)]
-        if f_mes != "Todos": df_f = df_f[df_f['Data'].dt.month == meses.index(f_mes)]
+        if sel_ano != "Todos": df_f = df_f[df_f['Data'].dt.year == int(sel_ano)]
+        if sel_mes != "Todos": df_f = df_f[df_f['Data'].dt.month == meses_pt.index(sel_mes)]
+        if sel_dia: df_f = df_f[df_f['Data'].dt.date == sel_dia]
 
-        # CARDS DE TOTAIS
+        # MÉTRICAS NO TOPO (KPIs)
         tr, tc, tl, tk = df_f['Rec'].sum(), df_f['Cus'].sum(), df_f['Lucro'].sum(), df_f['KMR'].sum()
         
-        c1, c2 = st.columns(2)
-        c1.metric("Faturamento", format_br(tr))
-        c1.metric("Lucro Líquido", format_br(tl))
-        c1.metric("Faturamento / KM", format_br(tr/tk if tk > 0 else 0))
-        
-        c2.metric("Custos Totais", format_br(tc))
-        c2.metric("KM Rodado", f"{tk:,.0f} km".replace(",", "."))
-        c2.metric("Lucro / KM", format_br(tl/tk if tk > 0 else 0))
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Faturamento Total", format_br(tr))
+            st.metric("Lucro Líquido", format_br(tl))
+            st.metric("Faturamento por KM", format_br(tr/tk if tk > 0 else 0))
+        with col2:
+            st.metric("Custos Totais", format_br(tc))
+            st.metric("KM Rodado Total", f"{tk:,.0f} km".replace(",", "."))
+            st.metric("Lucro por KM", format_br(tl/tk if tk > 0 else 0))
 
-        with st.expander("📋 Ver Dados Detalhados"):
+        with st.expander("📋 Ver Dados em Tabela"):
             st.dataframe(df_f, use_container_width=True)
 
         # GRÁFICOS
-        st.markdown("### 📊 Gráficos de Barra")
-        df_f['Dia'] = df_f['Data'].dt.strftime('%d/%m')
-        df_g = df_f.groupby('Dia').agg({'Rec':'sum','Cus':'sum','KMR':'sum'}).reset_index().sort_values('Dia')
+        st.divider()
+        st.markdown("### 📊 Gráficos de Performance")
+        df_f['Dia_Mes'] = df_f['Data'].dt.strftime('%d/%m')
+        df_g = df_f.groupby('Dia_Mes').agg({'Rec':'sum','Cus':'sum','KMR':'sum'}).reset_index()
 
-        st.write("**Faturamento vs Custos (Dia)**")
-        fig1 = px.bar(df_g, x='Dia', y=['Rec', 'Cus'], barmode='group', 
+        st.write("**Ganhos vs Custos por Dia (R$)**")
+        fig1 = px.bar(df_g, x='Dia_Mes', y=['Rec', 'Cus'], barmode='group', 
+                      labels={'value':'Valor R$', 'Dia_Mes':'Dia', 'variable':'Legenda'},
                       color_discrete_map={'Rec':'#28a745','Cus':'#dc3545'}, text_auto='.2s')
         st.plotly_chart(fig1, use_container_width=True)
 
-        st.write("**Faturamento por App**")
+        st.write("**Faturamento por App (R$)**")
         apps = df_f[['Urbano','Boraali','app163','Outros_Receita']].sum()
-        fig2 = px.bar(x=apps.index, y=apps.values, text_auto='.2s', color_discrete_sequence=['#28a745'])
+        fig2 = px.bar(x=apps.index, y=apps.values, text_auto='.2s', color_discrete_sequence=['#28a745'], labels={'x':'Aplicativo','y':'Total R$'})
         st.plotly_chart(fig2, use_container_width=True)
 
-        st.write("**Onde está seu custo?**")
+        st.write("**Distribuição de Custos (%)**")
         gastos = df_f[['Energia','Manuten','Seguro','Aplicativo','Alimentacao','Outros_Custos']].sum()
         fig3 = px.pie(names=gastos.index, values=gastos.values, hole=0.4)
         st.plotly_chart(fig3, use_container_width=True)
