@@ -16,7 +16,6 @@ st.markdown("""
         #MainMenu, header, footer, .stDeployButton {display: none !important;}
         [data-testid="stToolbar"], [data-testid="stDecoration"] {display: none !important;}
         
-        /* Ajuste fino de margens para celular */
         .block-container {
             padding-top: 1rem !important; 
             padding-bottom: 2rem !important;
@@ -182,11 +181,9 @@ if not st.session_state.autenticado:
 
 # --- 4. APLICAÇÃO ---
 df_total = carregar_dados()
+# Carrega TUDO do usuário (sem filtro de data para não sumir dados futuros/recentes)
 df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) & 
-                   (df_total['Status'] != 'Lixeira')].copy() # Removido filtro de data aqui para poder achar o ultimo registro geral
-
-# Filtra visualmente apenas datas validas (<= Hoje) apenas para garantir sanidade, mas vamos usar o DF completo para achar a ultima data
-df_user_valid = df_user[(df_user['Data'].dt.date <= HOJE_BR)].copy()
+                   (df_total['Status'] != 'Lixeira')].copy()
 
 nav_opcao = st.radio("", ["📝 LANÇAR", "📊 DASHBOARD"], horizontal=True, label_visibility="collapsed")
 
@@ -214,23 +211,26 @@ if nav_opcao == "📝 LANÇAR":
         v1 = c1.number_input("Urbano (99/Uber)", min_value=0.0, value=None, placeholder="R$ 0,00")
         v2 = c2.number_input("BoraAli", min_value=0.0, value=None, placeholder="R$ 0,00")
         v3 = c1.number_input("app163", min_value=0.0, value=None, placeholder="R$ 0,00")
-        v4 = c2.number_input("Outros", min_value=0.0, value=None, placeholder="R$ 0,00")
+        v4 = c2.number_input("Outros (Receita)", min_value=0.0, value=None, placeholder="R$ 0,00")
 
     st.markdown("##### 💸 Custos do Dia")
     with st.container(border=True):
         d1, d2 = st.columns(2)
-        cust_e = d1.number_input("Energia (kW)", min_value=0.0, value=None, placeholder="R$ 0,00")
+        # Campos renomeados conforme solicitado
+        cust_e = d1.number_input("Combustível/Energia", min_value=0.0, value=None, placeholder="R$ 0,00")
         cust_m = d2.number_input("Manutenção", min_value=0.0, value=None, placeholder="R$ 0,00")
         cust_s = d1.number_input("Seguro", min_value=0.0, value=None, placeholder="R$ 0,00")
-        cust_o = d2.number_input("Docs/Multas", min_value=0.0, value=None, placeholder="R$ 0,00")
-        cust_a = d1.number_input("Assinatura Apps", min_value=0.0, value=None, placeholder="R$ 0,00")
-        cust_f = d2.number_input("Alimentação", min_value=0.0, value=None, placeholder="R$ 0,00")
+        cust_o = d2.number_input("Documentos/Multas", min_value=0.0, value=None, placeholder="R$ 0,00")
+        cust_a = d1.number_input("Mensalidades Apps", min_value=0.0, value=None, placeholder="R$ 0,00")
+        # "Outros" mapeado para Alimentacao (Coluna original) para manter compatibilidade
+        cust_f = d2.number_input("Outros", min_value=0.0, value=None, placeholder="R$ 0,00")
     
     st.markdown("##### 🚗 Hodômetro")
     u_km = 0
-    if not df_user_valid.empty:
+    # Lógica Blindada para KM: Busca no DF completo, ordenado por data
+    if not df_user.empty:
         try:
-            df_km_valid = df_user_valid.sort_values(by='Data', ascending=False)
+            df_km_valid = df_user.sort_values(by='Data', ascending=False)
             df_km_valid = df_km_valid[df_km_valid['KM_Final'] > 0]
             if not df_km_valid.empty: u_km = int(df_km_valid.iloc[0]['KM_Final'])
         except: u_km = 0
@@ -257,12 +257,12 @@ if nav_opcao == "📝 LANÇAR":
         st.success("Lançamento salvo com sucesso!"); time.sleep(1); st.rerun()
 
 elif nav_opcao == "📊 DASHBOARD":
-    if df_user_valid.empty: st.info("Nenhum dado lançado ainda.")
+    # Verifica DF completo (sem filtro de data <= hoje)
+    if df_user.empty: st.info("Nenhum dado lançado ainda.")
     else:
-        # LÓGICA DO SMART FILTER (FILTRO INTELIGENTE)
-        df_bi = df_user_valid.copy().sort_values('Data', ascending=False)
+        df_bi = df_user.copy().sort_values('Data', ascending=False)
         
-        # Encontra a data mais recente com dados (Último dia trabalhado)
+        # Smart Filter: Pega a última data registrada no banco
         if not df_bi.empty:
             ultima_data_registrada = df_bi['Data'].max()
             ano_padrao = ultima_data_registrada.year
@@ -275,23 +275,18 @@ elif nav_opcao == "📊 DASHBOARD":
             f_dia = st.date_input("Dia Específico", value=None, format="DD/MM/YYYY")
             fc1, fc2 = st.columns(2)
             
-            # Lista de Anos
             anos_disp = sorted(df_bi['Data'].dt.year.dropna().unique().astype(int).astype(str).tolist(), reverse=True)
             if str(HOJE_BR.year) not in anos_disp: anos_disp.insert(0, str(HOJE_BR.year))
             
-            # Mapa de Meses
             meses_map = {1:"Janeiro", 2:"Fevereiro", 3:"Março", 4:"Abril", 5:"Maio", 6:"Junho", 7:"Julho", 8:"Agosto", 9:"Setembro", 10:"Outubro", 11:"Novembro", 12:"Dezembro"}
-            
-            # Define índices baseados na ÚLTIMA DATA REGISTRADA (não hoje)
             try: idx_ano = anos_disp.index(str(ano_padrao))
             except: idx_ano = 0
-            
             idx_mes = mes_padrao - 1
             
             sel_ano = fc1.selectbox("Ano", ["Todos"] + anos_disp, index=idx_ano+1 if "Todos" in ["Todos"]+anos_disp else 0)
             sel_mes = fc2.selectbox("Mês", ["Todos"] + list(meses_map.values()), index=idx_mes+1)
         
-        # Aplicação dos Filtros
+        # Aplica Filtros
         df_f = df_bi.copy()
         if f_dia: 
             df_f = df_f[df_f['Data'].dt.date == f_dia]
@@ -325,7 +320,6 @@ elif nav_opcao == "📊 DASHBOARD":
         
         df_ex = df_f.copy()
         df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m/%Y')
-        # REMOVIDO CPF DA VISUALIZAÇÃO
         cols_display = [c for c in COLUNAS_OFICIAIS if c in df_ex.columns and c != 'CPF']
         
         st.dataframe(
@@ -377,7 +371,7 @@ elif nav_opcao == "📊 DASHBOARD":
                             color_discrete_map={'Fat_KM': '#17a2b8', 'Lucro_KM': '#6c757d'})
             st.plotly_chart(configurar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
 
-st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v11</div><br>", unsafe_allow_html=True)
+st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v12</div><br>", unsafe_allow_html=True)
 if st.button("Sair"): 
     st.session_state.autenticado = False
     st.query_params.clear(); st.rerun()
