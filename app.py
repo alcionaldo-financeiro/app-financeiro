@@ -23,7 +23,7 @@ st.markdown("""
             padding-right: 0.5rem !important;
         }
         
-        /* Botões de Ação (Salvar/Excluir) */
+        /* Botões de Ação */
         div.stButton > button[kind="primary"] {
             background-color: #28a745 !important;
             color: white !important;
@@ -53,19 +53,19 @@ st.markdown("""
             font-size: 1rem;
             cursor: pointer;
             border: 1px solid #ddd;
-            background-color: #f8f9fa; /* Fundo inativo claro */
-            color: #888; /* Texto inativo cinza */
+            background-color: #f8f9fa;
+            color: #888;
             font-weight: 600;
             transition: all 0.3s ease;
         }
         
-        /* ESTADO SELECIONADO (BEM VISÍVEL) */
+        /* ESTADO SELECIONADO */
         div[role="radiogroup"] label[data-checked="true"] {
-            background-color: #1e7e34 !important; /* Verde Forte */
+            background-color: #1e7e34 !important;
             color: white !important;
             font-weight: 900 !important;
             border: 2px solid #145523 !important;
-            transform: scale(1.03); /* Leve aumento */
+            transform: scale(1.03);
             box-shadow: 0 4px 10px rgba(30, 126, 52, 0.4);
         }
 
@@ -127,7 +127,7 @@ def salvar_no_banco(df_novo):
     conn.update(worksheet=0, data=df_novo)
     st.cache_data.clear()
 
-# --- 3. LOGIN AUTO (CORRIGIDO) ---
+# --- 3. LOGIN AUTO (USANDO FORMULÁRIO PARA FORÇAR SAVE DO NAVEGADOR) ---
 params = st.query_params
 u_url = params.get("user", "")
 c_url = limpar_cpf(params.get("cpf", ""))
@@ -136,32 +136,29 @@ if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
-    # 1. Tenta Login Direto via URL
+    # Tenta Login Direto via URL
     if u_url and len(c_url) == 11:
         st.session_state.update({'usuario': u_url, 'cpf_usuario': c_url, 'autenticado': True})
         st.rerun()
     else:
-        # 2. Mostra tela de Login (Com memória)
         st.title("💎 BYD Pro Login")
+        st.info("ℹ️ Para entrar direto na próxima vez: Ao entrar, salve o site nos **Favoritos** ou aceite quando o navegador perguntar se quer **Salvar Senha**.")
         
-        # Recupera dados da memória se existirem
-        def_user = u_url if u_url else st.session_state.get('last_user', '')
-        def_cpf = c_url if c_url else st.session_state.get('last_cpf', '')
-        
-        n_in = st.text_input("Nome:", value=def_user)
-        c_in = st.text_input("CPF:", value=def_cpf, max_chars=11)
-        
-        if st.button("ENTRAR ✅", type="primary"):
-            c_l = limpar_cpf(c_in)
-            if n_in and len(c_l) == 11:
-                st.session_state.update({'usuario': n_in, 'cpf_usuario': c_l, 'autenticado': True})
-                # Salva na memória para reuso
-                st.session_state.last_user = n_in
-                st.session_state.last_cpf = c_l
-                # Força atualização da URL (Para Favoritos)
-                st.query_params.update({"user": n_in, "cpf": c_l})
-                st.rerun()
-            else: st.error("CPF inválido.")
+        # O uso de st.form ajuda o navegador a entender que é um login
+        with st.form("login_form"):
+            n_in = st.text_input("Nome (Motorista):")
+            c_in = st.text_input("CPF (Apenas números):", max_chars=11)
+            submitted = st.form_submit_button("ENTRAR ✅", type="primary")
+            
+            if submitted:
+                c_l = limpar_cpf(c_in)
+                if n_in and len(c_l) == 11:
+                    st.session_state.update({'usuario': n_in, 'cpf_usuario': c_l, 'autenticado': True})
+                    # Atualiza URL imediatamente
+                    st.query_params.update({"user": n_in, "cpf": c_l})
+                    st.rerun()
+                else:
+                    st.error("CPF inválido. Digite 11 números.")
         st.stop()
 
 # --- 4. APP ---
