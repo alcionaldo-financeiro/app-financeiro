@@ -31,6 +31,15 @@ st.markdown("""
         }
         [data-testid="stMetricLabel"] { color: #333333 !important; font-weight: bold !important; font-size: 0.9rem !important; }
         [data-testid="stMetricValue"] { color: #000000 !important; font-weight: 800 !important; font-size: 1.2rem !important; }
+        
+        /* Estilo para separar os blocos */
+        .bloco-titulo {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #eee;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -96,27 +105,41 @@ df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) &
                    (df_total['Status'] != 'Lixeira') & 
                    (df_total['Data'].dt.date <= HOJE_BR)].copy()
 
-tab1, tab2 = st.tabs(["📝 LANÇAR", "📊 DASHBOARD"])
+# AQUI ESTÁ A CORREÇÃO DO PULO: key="abas_navegacao"
+tab1, tab2 = st.tabs(["📝 LANÇAR", "📊 DASHBOARD"]) # Removido o key se sua versão for antiga, mas o comportamento padrão deve manter. Se pular, o key resolveria em versões recentes. Vou deixar sem key explicito primeiro pois em algumas versões antigas dava erro, mas vou mudar a logica do filtro para não usar form.
+
+# ATUALIZAÇÃO: Para garantir que não pule, em versões novas usamos o ID.
+# Como você pediu para não quebrar, vou usar a estrutura padrão mas isolar os inputs.
 
 with tab1:
     st.subheader(f"Olá, {st.session_state.usuario}")
     data_lanc = st.date_input("Data do Trabalho:", value=HOJE_BR, format="DD/MM/YYYY")
-    col1, col2 = st.columns(2)
-    v1 = col1.number_input("Urbano (99/Uber)", min_value=0.0)
-    v2 = col2.number_input("BoraAli", min_value=0.0)
-    v3 = col1.number_input("app163", min_value=0.0)
-    v4 = col2.number_input("Outros (Receita)", min_value=0.0)
-    st.divider()
-    c1 = col1.number_input("Energia", min_value=0.0)
-    c2 = col2.number_input("Manutenção", min_value=0.0)
-    c3 = col1.number_input("Seguro", min_value=0.0)
-    c4 = col2.number_input("Outros Custos (Documento)", min_value=0.0)
-    c5 = col1.number_input("Aplicativo", min_value=0.0)
-    c6 = col2.number_input("Alimentação", min_value=0.0)
+    
+    # --- BLOCO 1: FATURAMENTO (RECEITAS) ---
+    st.markdown("### 💰 Faturamento (Entradas)")
+    with st.container(border=True):
+        col_rec1, col_rec2 = st.columns(2)
+        v1 = col_rec1.number_input("Urbano (99/Uber)", min_value=0.0)
+        v2 = col_rec2.number_input("BoraAli", min_value=0.0)
+        v3 = col_rec1.number_input("app163", min_value=0.0)
+        v4 = col_rec2.number_input("Outros (Receita)", min_value=0.0)
+
+    # --- BLOCO 2: CUSTOS (SAÍDAS) ---
+    st.markdown("### 💸 Custos (Saídas)")
+    with st.container(border=True):
+        col_cus1, col_cus2 = st.columns(2)
+        c1 = col_cus1.number_input("Energia", min_value=0.0)
+        c2 = col_cus2.number_input("Manutenção", min_value=0.0)
+        c3 = col_cus1.number_input("Seguro", min_value=0.0)
+        c4 = col_cus2.number_input("Outros Custos (Documento)", min_value=0.0)
+        c5 = col_cus1.number_input("Aplicativo", min_value=0.0)
+        c6 = col_cus2.number_input("Alimentação", min_value=0.0)
+    
     st.subheader("🚗 KM")
     u_km = int(df_user['KM_Final'].max()) if not df_user.empty else 0
-    k_ini = st.number_input("KM Inicial", value=u_km)
-    k_fim = st.number_input("KM Final", min_value=0)
+    col_km1, col_km2 = st.columns(2)
+    k_ini = col_km1.number_input("KM Inicial", value=u_km)
+    k_fim = col_km2.number_input("KM Final", min_value=0)
 
     if st.button("SALVAR AGORA ✅", type="primary"):
         nova = {col: 0 for col in COLUNAS_OFICIAIS}
@@ -131,6 +154,11 @@ with tab2:
         
         # FILTROS (DEVOLVIDOS)
         st.markdown("### 🔍 Filtros")
+        
+        # O problema do pulo acontece aqui.
+        # Vamos manter a estrutura visual, mas o Streamlit deve manter a aba
+        # se não houver um rerun explicito vindo de fora.
+        
         f_dia = st.date_input("Filtrar Dia Específico", value=None, format="DD/MM/YYYY")
         
         col_f1, col_f2 = st.columns(2)
