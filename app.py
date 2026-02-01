@@ -98,6 +98,7 @@ def v(valor):
     if valor is None: return 0.0
     return float(valor)
 
+# Carregamento apenas para leitura inicial
 @st.cache_data(ttl=2)
 def carregar_dados():
     try:
@@ -113,12 +114,36 @@ def carregar_dados():
         return df
     except: return pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
-def salvar_direto(df_novo):
-    """Salva sem check para evitar erro falso."""
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    conn.update(worksheet=0, data=df_novo)
-    st.cache_data.clear()
-    return True
+# NOVA FUNÇÃO DE SALVAMENTO BLINDADO (Lê Fresco -> Anexa -> Grava)
+def adicionar_registro_seguro(novo_dict):
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        # 1. Lê a versão mais atual direto da nuvem (sem cache)
+        df_atual = conn.read(worksheet=0, ttl=0)
+        
+        # Garante estrutura
+        if df_atual is None or df_atual.empty:
+            df_atual = pd.DataFrame(columns=COLUNAS_OFICIAIS)
+        else:
+            # Garante colunas
+            for col in COLUNAS_OFICIAIS:
+                if col not in df_atual.columns: df_atual[col] = pd.NA
+        
+        # 2. Cria DataFrame da nova linha
+        df_novo_registro = pd.DataFrame([novo_dict])
+        
+        # 3. Concatena
+        df_final = pd.concat([df_atual, df_novo_registro], ignore_index=True)
+        
+        # 4. Atualiza
+        conn.update(worksheet=0, data=df_final)
+        
+        # 5. Limpa cache para o app ver a mudança na recarga
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar na nuvem: {e}")
+        return False
 
 # --- 3. TELA DE LOGIN ---
 params = st.query_params
@@ -158,6 +183,7 @@ if not st.session_state.autenticado:
         st.stop()
 
 # --- 4. APLICAÇÃO ---
+# Carrega dados iniciais
 df_total = carregar_dados()
 df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) & 
                    (df_total['Status'] != 'Lixeira')].copy()
@@ -204,7 +230,7 @@ if nav_opcao == "📝 LANÇAR":
     u_km = 0
     if not df_user.empty:
         try:
-            # Busca o maior KM registrado em TODA a base, independente da data
+            # Busca KM em toda a base histórica
             df_km_valid = df_user.sort_values(by='Data', ascending=False)
             df_km_valid = df_km_valid[df_km_valid['KM_Final'] > 0]
             if not df_km_valid.empty: 
@@ -218,9 +244,9 @@ if nav_opcao == "📝 LANÇAR":
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("SALVAR REGISTRO", type="primary", key="btn_salvar"):
+        # Lógica de KM Final automático se deixado em branco ou 0
         km_f_real = float(k_fim) if k_fim and float(k_fim) > 0 else float(k_ini)
         
-        # Gera ID
         novo_id = str(int(time.time()))
         
         nova = {col: 0 for col in COLUNAS_OFICIAIS}
@@ -234,35 +260,31 @@ if nav_opcao == "📝 LANÇAR":
             'KM_Inicial': float(k_ini), 'KM_Final': km_f_real
         })
         
-        # Concatena e salva
-        df_novo_completo = pd.concat([df_total, pd.DataFrame([nova])], ignore_index=True)
-        salvar_direto(df_novo_completo)
-        
-        st.success("✅ Lançamento salvo com sucesso!")
-        
-        # LIMPEZA SEGURA (Deleta a chave da memória em vez de setar None)
-        # Isso corrige o erro StreamlitAPIException
-        campos_limpar = [
-            "rec_urbano", "rec_boraali", "rec_app163", "rec_outros",
-            "desp_energia", "desp_manut", "desp_seguro", "desp_docs", "desp_apps", "desp_outros_f",
-            "km_final_input"
-        ]
-        for campo in campos_limpar:
-            if campo in st.session_state:
-                del st.session_state[campo] # AQUI ESTÁ A CORREÇÃO PRINCIPAL
-        
-        time.sleep(1.5)
-        st.rerun()
+        # --- SALVAMENTO BLINDADO ---
+        if adicionar_registro_seguro(nova):
+            st.success("✅ Lançamento salvo com sucesso!")
+            
+            # Limpeza
+            campos_limpar = [
+                "rec_urbano", "rec_boraali", "rec_app163", "rec_outros",
+                "desp_energia", "desp_manut", "desp_seguro", "desp_docs", "desp_apps", "desp_outros_f",
+                "km_final_input"
+            ]
+            for campo in campos_limpar:
+                if campo in st.session_state:
+                    del st.session_state[campo]
+            
+            time.sleep(1.5)
+            st.rerun()
 
 elif nav_opcao == "📊 DASHBOARD":
     if df_user.empty: st.info("Nenhum dado lançado ainda.")
     else:
-        # Ordenação
+        # Garante ordenação (Recente -> Antigo)
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         
-        # Filtro Inteligente (Passado/Presente)
+        # Filtro Inteligente (Ignora Futuro)
         df_passado = df_bi[df_bi['Data'].dt.date <= HOJE_BR]
-        
         if not df_passado.empty:
             ultima_data_valida = df_passado['Data'].max()
             ano_padrao = ultima_data_valida.year
@@ -287,6 +309,7 @@ elif nav_opcao == "📊 DASHBOARD":
             sel_ano = fc1.selectbox("Ano", ["Todos"] + anos_disp, index=idx_ano+1 if "Todos" in ["Todos"]+anos_disp else 0, key="filtro_ano")
             sel_mes = fc2.selectbox("Mês", ["Todos"] + list(meses_map.values()), index=idx_mes+1, key="filtro_mes")
         
+        # Aplica Filtros
         df_f = df_bi.copy()
         if f_dia: 
             df_f = df_f[df_f['Data'].dt.date == f_dia]
@@ -296,6 +319,7 @@ elif nav_opcao == "📊 DASHBOARD":
                 m_num = list(meses_map.keys())[list(meses_map.values()).index(sel_mes)]
                 df_f = df_f[df_f['Data'].dt.month == m_num]
 
+        # Reordena para tabela
         df_f = df_f.sort_values(by='Data', ascending=False)
 
         # Cálculos
@@ -356,8 +380,12 @@ elif nav_opcao == "📊 DASHBOARD":
             if ids:
                 item_ex = st.selectbox("Selecione o ID", ids, key="delete_select")
                 if st.button("Confirmar Exclusão", key="btn_delete"):
-                    df_total.loc[df_total['ID_Unico'] == item_ex, 'Status'] = 'Lixeira'
-                    salvar_direto(df_total)
+                    # Use a função segura também para exclusão
+                    conn = st.connection("gsheets", type=GSheetsConnection)
+                    df_del = conn.read(worksheet=0, ttl=0)
+                    df_del.loc[df_del['ID_Unico'] == item_ex, 'Status'] = 'Lixeira'
+                    conn.update(worksheet=0, data=df_del)
+                    st.cache_data.clear()
                     st.rerun()
 
         st.divider()
@@ -387,7 +415,7 @@ elif nav_opcao == "📊 DASHBOARD":
                             color_discrete_map={'Fat_KM': '#17a2b8', 'Lucro_KM': '#6c757d'})
             st.plotly_chart(configurar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
 
-st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v18</div><br>", unsafe_allow_html=True)
+st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v19</div><br>", unsafe_allow_html=True)
 if st.button("Sair"): 
     st.session_state.autenticado = False
     st.query_params.clear(); st.rerun()
