@@ -89,7 +89,6 @@ st.markdown("""
 # --- 2. FUNÇÕES ---
 FUSO_BR = pytz.timezone('America/Sao_Paulo')
 HOJE_BR = datetime.now(FUSO_BR).date()
-# Ordem exata para a tabela
 COLUNAS_OFICIAIS = ['ID_Unico', 'Status', 'Usuario', 'CPF', 'Data', 'Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 'KM_Inicial', 'KM_Final', 'Detalhes']
 
 def format_br(valor):
@@ -118,7 +117,6 @@ def carregar_dados():
         cols_num = ['Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 'KM_Inicial', 'KM_Final']
         for c in cols_num: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
         df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
-        # Garante que todas as colunas existem
         for col in COLUNAS_OFICIAIS:
             if col not in df.columns: df[col] = pd.NA
         return df
@@ -129,7 +127,7 @@ def salvar_no_banco(df_novo):
     conn.update(worksheet=0, data=df_novo)
     st.cache_data.clear()
 
-# --- 3. LOGIN AUTO ---
+# --- 3. LOGIN AUTO (CORRIGIDO) ---
 params = st.query_params
 u_url = params.get("user", "")
 c_url = limpar_cpf(params.get("cpf", ""))
@@ -138,17 +136,29 @@ if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
+    # 1. Tenta Login Direto via URL
     if u_url and len(c_url) == 11:
         st.session_state.update({'usuario': u_url, 'cpf_usuario': c_url, 'autenticado': True})
         st.rerun()
     else:
+        # 2. Mostra tela de Login (Com memória)
         st.title("💎 BYD Pro Login")
-        n_in = st.text_input("Nome:", value="")
-        c_in = st.text_input("CPF:", value="", max_chars=11)
+        
+        # Recupera dados da memória se existirem
+        def_user = u_url if u_url else st.session_state.get('last_user', '')
+        def_cpf = c_url if c_url else st.session_state.get('last_cpf', '')
+        
+        n_in = st.text_input("Nome:", value=def_user)
+        c_in = st.text_input("CPF:", value=def_cpf, max_chars=11)
+        
         if st.button("ENTRAR ✅", type="primary"):
             c_l = limpar_cpf(c_in)
             if n_in and len(c_l) == 11:
                 st.session_state.update({'usuario': n_in, 'cpf_usuario': c_l, 'autenticado': True})
+                # Salva na memória para reuso
+                st.session_state.last_user = n_in
+                st.session_state.last_cpf = c_l
+                # Força atualização da URL (Para Favoritos)
                 st.query_params.update({"user": n_in, "cpf": c_l})
                 st.rerun()
             else: st.error("CPF inválido.")
@@ -274,34 +284,27 @@ elif nav_opcao == "📊 RELATÓRIOS":
         m5.metric("Fat/KM", format_br(tr/tk if tk > 0 else 0)) 
         m6.metric("Lucro/KM", format_br(tl/tk if tk > 0 else 0))
 
-        # --- TABELA COMPLETA (SOLICITADA) ---
+        # --- TABELA COMPLETA (ROLAGEM NATIVA) ---
         st.divider()
         st.markdown("#### 📋 Histórico Completo")
-        st.caption("Arraste para o lado na tabela para ver todas as colunas ➡️")
+        st.caption("Arraste a tabela para ver colunas escondidas ➡️")
         
-        # Prepara tabela completa
         df_ex = df_f.copy()
         df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m/%Y')
-        
-        # Garante a ordem e renomeia para ficar bonito
         cols_display = [c for c in COLUNAS_OFICIAIS if c in df_ex.columns]
         
         st.dataframe(
             df_ex[cols_display], 
-            use_container_width=True, # Tenta ocupar a largura
-            height=400, # Garante rolagem vertical se for longa
+            use_container_width=True, 
+            height=400,
             hide_index=True,
             column_config={
                 "ID_Unico": st.column_config.TextColumn("ID", width="small"),
                 "Data": st.column_config.TextColumn("Data", width="medium"),
-                "Status": None, # Esconde Status interno
-                "Usuario": None, # Esconde Usuario (já sabe quem é)
-                "CPF": None, # Esconde CPF
                 "Detalhes": st.column_config.TextColumn("Obs", width="large")
             }
         )
         
-        # Exclusão
         with st.expander("🗑️ Apagar Lançamento"):
             ids = df_f['ID_Unico'].tolist()
             if ids:
@@ -333,7 +336,7 @@ elif nav_opcao == "📊 RELATÓRIOS":
                            color_discrete_map={'Receita': '#28a745', 'Lucro': '#007bff'})
             st.plotly_chart(configurar_grafico(fig_ev), use_container_width=True, config={'displayModeBar': False})
 
-        # G3: Eficiência (Barras)
+        # G3: Eficiência
         st.caption("Eficiência por KM")
         if not df_graph.empty:
             df_graph['Fat_KM'] = df_graph.apply(lambda x: x['Receita']/x['Km rodados'] if x['Km rodados'] > 0 else 0, axis=1)
