@@ -6,9 +6,8 @@ from datetime import datetime
 import time
 import pytz
 import plotly.express as px
-import plotly.graph_objects as go
 
-# --- 1. CONFIGURAÇÃO E ESTILO (MOBILE FIRST + HIGH CONTRAST) ---
+# --- 1. CONFIGURAÇÃO E ESTILO (MOBILE FIRST + ALTO CONTRASTE) ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -24,81 +23,73 @@ st.markdown("""
             padding-right: 0.5rem !important;
         }
         
-        /* Botões Principais */
+        /* Botões de Ação (Salvar/Excluir) */
         div.stButton > button[kind="primary"] {
             background-color: #28a745 !important;
             color: white !important;
             border-radius: 12px !important;
             height: 3.8rem !important;
-            font-weight: bold !important;
-            font-size: 1.1rem !important;
+            font-weight: 800 !important;
+            font-size: 1.2rem !important;
             width: 100% !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             border: none !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
         
-        /* ABAS/MENU (Melhorado - Alto Contraste) */
+        /* --- ESTILO NOVO DAS ABAS (RADIO) --- */
         div[role="radiogroup"] {
             display: flex;
-            justify-content: space-between;
-            width: 100%;
-            background-color: white;
-            padding: 0px;
-            margin-bottom: 15px;
-            border: none;
             gap: 10px;
+            background: transparent;
+            border: none;
+            justify-content: center;
         }
+        
         div[role="radiogroup"] label {
             flex: 1;
             text-align: center;
-            background-color: #f8f9fa; /* Fundo claro inativo */
-            color: #555; /* Texto escuro inativo */
-            border: 1px solid #ddd;
             border-radius: 12px;
-            padding: 12px 5px;
-            font-weight: bold;
+            padding: 15px 5px;
             font-size: 1rem;
             cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1px solid #ddd;
+            background-color: #f8f9fa; /* Fundo inativo claro */
+            color: #888; /* Texto inativo cinza */
+            font-weight: 600;
+            transition: all 0.3s ease;
         }
-        div[role="radiogroup"] label:hover {
-            background-color: #e9ecef;
-        }
-        /* Estado Selecionado (Escuro/Verde Forte para destaque) */
+        
+        /* ESTADO SELECIONADO (BEM VISÍVEL) */
         div[role="radiogroup"] label[data-checked="true"] {
-            background-color: #1e2a38 !important; /* Azul/Preto Profundo */
-            color: #ffffff !important; /* Texto Branco */
-            border: 2px solid #28a745 !important; /* Borda Verde */
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            transform: translateY(-1px);
+            background-color: #1e7e34 !important; /* Verde Forte */
+            color: white !important;
+            font-weight: 900 !important;
+            border: 2px solid #145523 !important;
+            transform: scale(1.03); /* Leve aumento */
+            box-shadow: 0 4px 10px rgba(30, 126, 52, 0.4);
         }
 
         /* KPIs (Cards) */
         [data-testid="stMetric"] {
             background-color: white !important;
             border: 1px solid #e0e0e0 !important;
-            padding: 8px !important;
+            padding: 10px !important;
             border-radius: 10px !important;
             text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
-        [data-testid="stMetricLabel"] { font-size: 0.8rem !important; color: #666; }
-        [data-testid="stMetricValue"] { font-size: 1.0rem !important; font-weight: 800; color: #000; }
+        [data-testid="stMetricLabel"] { font-size: 0.8rem !important; color: #555; font-weight: bold; }
+        [data-testid="stMetricValue"] { font-size: 1.1rem !important; font-weight: 800; color: #000; }
         
-        /* Expander do Filtro */
-        .streamlit-expanderHeader {
-            background-color: #f1f3f5;
-            border-radius: 8px;
-            font-weight: bold;
-            color: #333;
-        }
+        /* Ajuste para Tabelas no Mobile */
+        .stDataFrame { width: 100% !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. FUNÇÕES ---
 FUSO_BR = pytz.timezone('America/Sao_Paulo')
 HOJE_BR = datetime.now(FUSO_BR).date()
+# Ordem exata para a tabela
 COLUNAS_OFICIAIS = ['ID_Unico', 'Status', 'Usuario', 'CPF', 'Data', 'Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 'KM_Inicial', 'KM_Final', 'Detalhes']
 
 def format_br(valor):
@@ -127,6 +118,9 @@ def carregar_dados():
         cols_num = ['Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 'KM_Inicial', 'KM_Final']
         for c in cols_num: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
         df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+        # Garante que todas as colunas existem
+        for col in COLUNAS_OFICIAIS:
+            if col not in df.columns: df[col] = pd.NA
         return df
     except: return pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
@@ -135,7 +129,7 @@ def salvar_no_banco(df_novo):
     conn.update(worksheet=0, data=df_novo)
     st.cache_data.clear()
 
-# --- 3. LOGIN INTELIGENTE (AUTO-FILL) ---
+# --- 3. LOGIN AUTO ---
 params = st.query_params
 u_url = params.get("user", "")
 c_url = limpar_cpf(params.get("cpf", ""))
@@ -143,48 +137,44 @@ c_url = limpar_cpf(params.get("cpf", ""))
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
-# Lógica de Auto-Login: Se tiver dados válidos na URL, entra direto
 if not st.session_state.autenticado:
     if u_url and len(c_url) == 11:
         st.session_state.update({'usuario': u_url, 'cpf_usuario': c_url, 'autenticado': True})
         st.rerun()
     else:
         st.title("💎 BYD Pro Login")
-        st.info("💡 Dica: Após entrar, adicione esta página aos favoritos para login automático.")
-        
         n_in = st.text_input("Nome:", value="")
         c_in = st.text_input("CPF:", value="", max_chars=11)
-        
-        if st.button("ENTRAR AGORA ✅", type="primary"):
+        if st.button("ENTRAR ✅", type="primary"):
             c_l = limpar_cpf(c_in)
             if n_in and len(c_l) == 11:
                 st.session_state.update({'usuario': n_in, 'cpf_usuario': c_l, 'autenticado': True})
-                st.query_params.update({"user": n_in, "cpf": c_l}) # Salva na URL
+                st.query_params.update({"user": n_in, "cpf": c_l})
                 st.rerun()
             else: st.error("CPF inválido.")
         st.stop()
 
-# --- 4. APP PRINCIPAL ---
+# --- 4. APP ---
 df_total = carregar_dados()
 df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) & 
                    (df_total['Status'] != 'Lixeira') & 
                    (df_total['Data'].dt.date <= HOJE_BR)].copy()
 
 # Navegação High Contrast
-nav_opcao = st.radio("", ["📝 LANÇAR", "📊 RELATÓRIOS"], horizontal=True, label_visibility="collapsed")
+nav_opcao = st.radio("", ["📝 LANÇAR DADOS", "📊 RELATÓRIOS"], horizontal=True, label_visibility="collapsed")
 
-# Função para travar gráfico (Sem zoom/pan)
-def travar_grafico(fig):
+# Função para travar gráfico (Evita erro e zoom no mobile)
+def configurar_grafico(fig):
     fig.update_layout(
         xaxis=dict(fixedrange=True),
         yaxis=dict(fixedrange=True),
         margin=dict(l=10, r=10, t=30, b=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-        font=dict(size=11)
+        font=dict(size=12)
     )
     return fig
 
-if nav_opcao == "📝 LANÇAR":
+if nav_opcao == "📝 LANÇAR DADOS":
     st.subheader(f"Olá, {st.session_state.usuario}")
     data_lanc = st.date_input("Data do Trabalho:", value=HOJE_BR, format="DD/MM/YYYY")
     
@@ -235,26 +225,22 @@ if nav_opcao == "📝 LANÇAR":
         st.success("Salvo!"); time.sleep(1); st.rerun()
 
 elif nav_opcao == "📊 RELATÓRIOS":
-    if df_user.empty: st.info("Comece lançando seus dados.")
+    if df_user.empty: st.info("Sem dados.")
     else:
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         
-        # FILTROS INTELIGENTES (Expanded=False para iniciar fechado)
+        # FILTROS
         with st.expander("🔍 Toque para Filtrar Data", expanded=False):
-            f_dia = st.date_input("Dia Específico (Opcional)", value=None, format="DD/MM/YYYY")
+            f_dia = st.date_input("Dia Específico", value=None, format="DD/MM/YYYY")
             fc1, fc2 = st.columns(2)
             
-            # Listas
             anos_disp = sorted(df_bi['Data'].dt.year.dropna().unique().astype(int).astype(str).tolist(), reverse=True)
             if str(HOJE_BR.year) not in anos_disp: anos_disp.insert(0, str(HOJE_BR.year))
             
             meses_map = {1:"Janeiro", 2:"Fevereiro", 3:"Março", 4:"Abril", 5:"Maio", 6:"Junho", 7:"Julho", 8:"Agosto", 9:"Setembro", 10:"Outubro", 11:"Novembro", 12:"Dezembro"}
-            
-            # Índices Padrão (Mês atual e Ano atual)
             try: idx_ano = anos_disp.index(str(HOJE_BR.year))
             except: idx_ano = 0
-            
-            idx_mes = HOJE_BR.month - 1 # 0-based index
+            idx_mes = HOJE_BR.month - 1
             
             sel_ano = fc1.selectbox("Ano", ["Todos"] + anos_disp, index=idx_ano+1 if "Todos" in ["Todos"]+anos_disp else 0)
             sel_mes = fc2.selectbox("Mês", ["Todos"] + list(meses_map.values()), index=idx_mes+1)
@@ -269,17 +255,15 @@ elif nav_opcao == "📊 RELATÓRIOS":
                 m_num = list(meses_map.keys())[list(meses_map.values()).index(sel_mes)]
                 df_f = df_f[df_f['Data'].dt.month == m_num]
 
-        # CÁLCULOS
+        # KPI
         df_f['Receita'] = df_f[['Urbano','Boraali','app163','Outros_Receita']].sum(axis=1)
         df_f['Custos'] = df_f[['Energia','Manuten','Seguro','Outros_Custos','Aplicativo','Alimentacao']].sum(axis=1)
         df_f['Km rodados'] = (df_f['KM_Final'] - df_f['KM_Inicial']).clip(lower=0)
         df_f['Lucro'] = df_f['Receita'] - df_f['Custos']
         
-        # TOTAIS
         tr, tc, tl, tk = df_f['Receita'].sum(), df_f['Custos'].sum(), df_f['Lucro'].sum(), df_f['Km rodados'].sum()
         
-        # KPI
-        st.markdown("#### 💵 Resumo do Período")
+        st.markdown("#### 💵 Resumo")
         m1, m2, m3 = st.columns(3)
         m1.metric("Faturamento", format_br(tr))
         m2.metric("Lucro Líq.", format_br(tl))
@@ -290,16 +274,34 @@ elif nav_opcao == "📊 RELATÓRIOS":
         m5.metric("Fat/KM", format_br(tr/tk if tk > 0 else 0)) 
         m6.metric("Lucro/KM", format_br(tl/tk if tk > 0 else 0))
 
-        # HISTÓRICO
+        # --- TABELA COMPLETA (SOLICITADA) ---
         st.divider()
-        st.markdown("#### 📋 Histórico Recente")
+        st.markdown("#### 📋 Histórico Completo")
+        st.caption("Arraste para o lado na tabela para ver todas as colunas ➡️")
+        
+        # Prepara tabela completa
         df_ex = df_f.copy()
-        df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m')
+        df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m/%Y')
+        
+        # Garante a ordem e renomeia para ficar bonito
+        cols_display = [c for c in COLUNAS_OFICIAIS if c in df_ex.columns]
+        
         st.dataframe(
-            df_ex[['Data','Receita','Lucro','Km rodados','ID_Unico']].rename(columns={'Km rodados':'KM'}), 
-            use_container_width=True, height=250, hide_index=True
+            df_ex[cols_display], 
+            use_container_width=True, # Tenta ocupar a largura
+            height=400, # Garante rolagem vertical se for longa
+            hide_index=True,
+            column_config={
+                "ID_Unico": st.column_config.TextColumn("ID", width="small"),
+                "Data": st.column_config.TextColumn("Data", width="medium"),
+                "Status": None, # Esconde Status interno
+                "Usuario": None, # Esconde Usuario (já sabe quem é)
+                "CPF": None, # Esconde CPF
+                "Detalhes": st.column_config.TextColumn("Obs", width="large")
+            }
         )
         
+        # Exclusão
         with st.expander("🗑️ Apagar Lançamento"):
             ids = df_f['ID_Unico'].tolist()
             if ids:
@@ -312,39 +314,33 @@ elif nav_opcao == "📊 RELATÓRIOS":
         # GRÁFICOS
         st.divider()
         st.markdown("#### 📈 Análise Visual")
-        
-        # Ordenação Cronológica para Gráficos
         df_graph = df_f.sort_values('Data')
         df_graph['Dia'] = df_graph['Data'].dt.strftime('%d/%m')
 
-        # G1: Apps (Pizza)
+        # G1: Pizza
         st.caption("Faturamento por App")
         apps_sum = df_f[['Urbano', 'Boraali', 'app163', 'Outros_Receita']].sum().reset_index()
         apps_sum.columns = ['App', 'Valor']
-        apps_sum = apps_sum[apps_sum['Valor'] > 0] # Remove zerados
-        
+        apps_sum = apps_sum[apps_sum['Valor'] > 0]
         if not apps_sum.empty:
             fig_pie = px.pie(apps_sum, values='Valor', names='App', hole=0.4)
-            st.plotly_chart(travar_grafico(fig_pie), use_container_width=True, config={'displayModeBar': False})
-        else: st.info("Sem dados de receita.")
+            st.plotly_chart(configurar_grafico(fig_pie), use_container_width=True, config={'displayModeBar': False})
 
-        # G2: Fat vs Lucro (Barras)
-        st.caption("Faturamento vs Lucro Diário")
+        # G2: Barras
+        st.caption("Faturamento vs Lucro")
         if not df_graph.empty:
             fig_ev = px.bar(df_graph, x='Dia', y=['Receita', 'Lucro'], barmode='group', text_auto='.2s',
                            color_discrete_map={'Receita': '#28a745', 'Lucro': '#007bff'})
-            st.plotly_chart(travar_grafico(fig_ev), use_container_width=True, config={'displayModeBar': False})
+            st.plotly_chart(configurar_grafico(fig_ev), use_container_width=True, config={'displayModeBar': False})
 
-        # G3: Eficiência (Barras para evitar erro de linha)
-        st.caption("Eficiência Financeira (Por KM)")
+        # G3: Eficiência (Barras)
+        st.caption("Eficiência por KM")
         if not df_graph.empty:
-            # Prepara dados seguros
             df_graph['Fat_KM'] = df_graph.apply(lambda x: x['Receita']/x['Km rodados'] if x['Km rodados'] > 0 else 0, axis=1)
             df_graph['Lucro_KM'] = df_graph.apply(lambda x: x['Lucro']/x['Km rodados'] if x['Km rodados'] > 0 else 0, axis=1)
-            
             fig_ef = px.bar(df_graph, x='Dia', y=['Fat_KM', 'Lucro_KM'], barmode='group',
                             color_discrete_map={'Fat_KM': '#17a2b8', 'Lucro_KM': '#6c757d'})
-            st.plotly_chart(travar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
+            st.plotly_chart(configurar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 if st.button("Sair (Deslogar)"): 
