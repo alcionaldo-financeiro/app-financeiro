@@ -24,7 +24,7 @@ st.markdown("""
             padding-right: 0.8rem !important;
         }
         
-        /* --- BOTÃO PRINCIPAL (ESTILO APPLE/MODERNO) --- */
+        /* --- BOTÃO PRINCIPAL --- */
         div.stButton > button[kind="primary"] {
             background: linear-gradient(45deg, #28a745, #218838) !important;
             color: white !important;
@@ -82,7 +82,7 @@ st.markdown("""
         [data-testid="stMetricLabel"] { font-size: 0.75rem !important; color: #666; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
         [data-testid="stMetricValue"] { font-size: 1.1rem !important; font-weight: 800; color: #111; }
         
-        /* --- ESTILO DE LOGIN (CARTÃO DE VISITA) --- */
+        /* --- ESTILO DE LOGIN --- */
         .login-header {
             text-align: center;
             padding: 2rem 0;
@@ -143,7 +143,7 @@ def salvar_no_banco(df_novo):
     conn.update(worksheet=0, data=df_novo)
     st.cache_data.clear()
 
-# --- 3. TELA DE LOGIN (ESTILO CARTÃO DE VISITA) ---
+# --- 3. TELA DE LOGIN ---
 params = st.query_params
 u_url = params.get("user", "")
 c_url = limpar_cpf(params.get("cpf", ""))
@@ -156,7 +156,6 @@ if not st.session_state.autenticado:
         st.session_state.update({'usuario': u_url, 'cpf_usuario': c_url, 'autenticado': True})
         st.rerun()
     else:
-        # Cabeçalho Bonito
         st.markdown("""
             <div class="login-header">
                 <div class="login-logo">💎</div>
@@ -165,12 +164,11 @@ if not st.session_state.autenticado:
             </div>
         """, unsafe_allow_html=True)
         
-        # Formulário Clean
         with st.container():
             n_in = st.text_input("Nome do Motorista", placeholder="Como você quer ser chamado?")
             c_in = st.text_input("CPF de Acesso", placeholder="Apenas números", max_chars=11)
             
-            st.markdown("<br>", unsafe_allow_html=True) # Espaço
+            st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("ACESSAR SISTEMA", type="primary"):
                 c_l = limpar_cpf(c_in)
@@ -185,12 +183,13 @@ if not st.session_state.autenticado:
 # --- 4. APLICAÇÃO ---
 df_total = carregar_dados()
 df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) & 
-                   (df_total['Status'] != 'Lixeira') & 
-                   (df_total['Data'].dt.date <= HOJE_BR)].copy()
+                   (df_total['Status'] != 'Lixeira')].copy() # Removido filtro de data aqui para poder achar o ultimo registro geral
+
+# Filtra visualmente apenas datas validas (<= Hoje) apenas para garantir sanidade, mas vamos usar o DF completo para achar a ultima data
+df_user_valid = df_user[(df_user['Data'].dt.date <= HOJE_BR)].copy()
 
 nav_opcao = st.radio("", ["📝 LANÇAR", "📊 DASHBOARD"], horizontal=True, label_visibility="collapsed")
 
-# Função Anti-Erro para Gráficos
 def configurar_grafico(fig):
     fig.update_layout(
         xaxis=dict(fixedrange=True),
@@ -229,9 +228,9 @@ if nav_opcao == "📝 LANÇAR":
     
     st.markdown("##### 🚗 Hodômetro")
     u_km = 0
-    if not df_user.empty:
+    if not df_user_valid.empty:
         try:
-            df_km_valid = df_user.sort_values(by='Data', ascending=False)
+            df_km_valid = df_user_valid.sort_values(by='Data', ascending=False)
             df_km_valid = df_km_valid[df_km_valid['KM_Final'] > 0]
             if not df_km_valid.empty: u_km = int(df_km_valid.iloc[0]['KM_Final'])
         except: u_km = 0
@@ -258,22 +257,41 @@ if nav_opcao == "📝 LANÇAR":
         st.success("Lançamento salvo com sucesso!"); time.sleep(1); st.rerun()
 
 elif nav_opcao == "📊 DASHBOARD":
-    if df_user.empty: st.info("Nenhum dado lançado ainda.")
+    if df_user_valid.empty: st.info("Nenhum dado lançado ainda.")
     else:
-        df_bi = df_user.copy().sort_values('Data', ascending=False)
+        # LÓGICA DO SMART FILTER (FILTRO INTELIGENTE)
+        df_bi = df_user_valid.copy().sort_values('Data', ascending=False)
         
+        # Encontra a data mais recente com dados (Último dia trabalhado)
+        if not df_bi.empty:
+            ultima_data_registrada = df_bi['Data'].max()
+            ano_padrao = ultima_data_registrada.year
+            mes_padrao = ultima_data_registrada.month
+        else:
+            ano_padrao = HOJE_BR.year
+            mes_padrao = HOJE_BR.month
+            
         with st.expander("📅 Filtrar Período", expanded=False):
             f_dia = st.date_input("Dia Específico", value=None, format="DD/MM/YYYY")
             fc1, fc2 = st.columns(2)
+            
+            # Lista de Anos
             anos_disp = sorted(df_bi['Data'].dt.year.dropna().unique().astype(int).astype(str).tolist(), reverse=True)
             if str(HOJE_BR.year) not in anos_disp: anos_disp.insert(0, str(HOJE_BR.year))
+            
+            # Mapa de Meses
             meses_map = {1:"Janeiro", 2:"Fevereiro", 3:"Março", 4:"Abril", 5:"Maio", 6:"Junho", 7:"Julho", 8:"Agosto", 9:"Setembro", 10:"Outubro", 11:"Novembro", 12:"Dezembro"}
-            try: idx_ano = anos_disp.index(str(HOJE_BR.year))
+            
+            # Define índices baseados na ÚLTIMA DATA REGISTRADA (não hoje)
+            try: idx_ano = anos_disp.index(str(ano_padrao))
             except: idx_ano = 0
-            idx_mes = HOJE_BR.month - 1
+            
+            idx_mes = mes_padrao - 1
+            
             sel_ano = fc1.selectbox("Ano", ["Todos"] + anos_disp, index=idx_ano+1 if "Todos" in ["Todos"]+anos_disp else 0)
             sel_mes = fc2.selectbox("Mês", ["Todos"] + list(meses_map.values()), index=idx_mes+1)
         
+        # Aplicação dos Filtros
         df_f = df_bi.copy()
         if f_dia: 
             df_f = df_f[df_f['Data'].dt.date == f_dia]
@@ -307,7 +325,8 @@ elif nav_opcao == "📊 DASHBOARD":
         
         df_ex = df_f.copy()
         df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m/%Y')
-        cols_display = [c for c in COLUNAS_OFICIAIS if c in df_ex.columns]
+        # REMOVIDO CPF DA VISUALIZAÇÃO
+        cols_display = [c for c in COLUNAS_OFICIAIS if c in df_ex.columns and c != 'CPF']
         
         st.dataframe(
             df_ex[cols_display], 
@@ -317,7 +336,8 @@ elif nav_opcao == "📊 DASHBOARD":
             column_config={
                 "ID_Unico": st.column_config.TextColumn("ID", width="small"),
                 "Data": st.column_config.TextColumn("Data", width="medium"),
-                "Detalhes": st.column_config.TextColumn("Obs", width="large")
+                "Detalhes": st.column_config.TextColumn("Obs", width="large"),
+                "Usuario": st.column_config.TextColumn("Motorista", width="medium")
             }
         )
         
@@ -357,7 +377,7 @@ elif nav_opcao == "📊 DASHBOARD":
                             color_discrete_map={'Fat_KM': '#17a2b8', 'Lucro_KM': '#6c757d'})
             st.plotly_chart(configurar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
 
-st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v10</div><br>", unsafe_allow_html=True)
+st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v11</div><br>", unsafe_allow_html=True)
 if st.button("Sair"): 
     st.session_state.autenticado = False
     st.query_params.clear(); st.rerun()
