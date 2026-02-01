@@ -7,7 +7,7 @@ import time
 import pytz
 import plotly.express as px
 
-# --- 1. CONFIGURAÇÃO E ESTILO (DESIGN PREMIUM) ---
+# --- 1. CONFIGURAÇÃO E ESTILO (DESIGN PREMIUM & COMPACTO) ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -19,8 +19,8 @@ st.markdown("""
         .block-container {
             padding-top: 1rem !important; 
             padding-bottom: 2rem !important;
-            padding-left: 0.8rem !important;
-            padding-right: 0.8rem !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
         }
         
         /* --- BOTÃO PRINCIPAL --- */
@@ -36,63 +36,39 @@ st.markdown("""
             box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
             transition: all 0.3s ease;
         }
-        div.stButton > button[kind="primary"]:active {
-            transform: scale(0.98);
-        }
+        div.stButton > button[kind="primary"]:active { transform: scale(0.98); }
 
         /* --- ABAS DE NAVEGAÇÃO --- */
         div[role="radiogroup"] {
-            display: flex;
-            gap: 8px;
-            background: transparent;
-            border: none;
-            justify-content: center;
-            margin-bottom: 15px;
+            display: flex; gap: 8px; background: transparent; border: none; justify-content: center; margin-bottom: 15px;
         }
         div[role="radiogroup"] label {
-            flex: 1;
-            text-align: center;
-            border-radius: 12px;
-            padding: 12px 5px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            border: 1px solid #e0e0e0;
-            background-color: #ffffff;
-            color: #666;
-            font-weight: 600;
+            flex: 1; text-align: center; border-radius: 12px; padding: 12px 5px; font-size: 0.9rem; cursor: pointer;
+            border: 1px solid #e0e0e0; background-color: #ffffff; color: #666; font-weight: 600;
             box-shadow: 0 2px 5px rgba(0,0,0,0.03);
         }
         div[role="radiogroup"] label[data-checked="true"] {
-            background-color: #1e2a38 !important; /* Dark Navy */
-            color: white !important;
-            border: 1px solid #1e2a38 !important;
-            font-weight: 800 !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            background-color: #1e2a38 !important; color: white !important; border: 1px solid #1e2a38 !important;
+            font-weight: 800 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
 
         /* --- CARDS KPI --- */
         [data-testid="stMetric"] {
-            background-color: #f8f9fa !important;
-            border: 1px solid #eee !important;
-            padding: 10px !important;
-            border-radius: 12px !important;
-            text-align: center;
+            background-color: #f8f9fa !important; border: 1px solid #eee !important; padding: 10px !important;
+            border-radius: 12px !important; text-align: center;
         }
-        [data-testid="stMetricLabel"] { font-size: 0.75rem !important; color: #666; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        [data-testid="stMetricLabel"] { font-size: 0.75rem !important; color: #666; font-weight: 600; text-transform: uppercase; }
         [data-testid="stMetricValue"] { font-size: 1.1rem !important; font-weight: 800; color: #111; }
         
         /* --- ESTILO DE LOGIN --- */
-        .login-header {
-            text-align: center;
-            padding: 2rem 0;
-            animation: fadeIn 1s ease-in;
-        }
+        .login-header { text-align: center; padding: 2rem 0; animation: fadeIn 1s ease-in; }
         .login-logo { font-size: 4rem; margin-bottom: 0.5rem; }
         .login-title { font-size: 2rem; font-weight: 800; color: #1e2a38; margin: 0; }
         .login-subtitle { font-size: 1rem; color: #888; font-weight: 400; margin-top: 5px; }
         
-        /* --- AJUSTES TABELA --- */
+        /* --- AJUSTES TABELA (COMPACTA) --- */
         .stDataFrame { width: 100% !important; }
+        [data-testid="stDataFrame"] td { white-space: nowrap !important; } /* Evita quebra de linha feia */
         
         @keyframes fadeIn {
             0% { opacity: 0; transform: translateY(20px); }
@@ -181,7 +157,6 @@ if not st.session_state.autenticado:
 
 # --- 4. APLICAÇÃO ---
 df_total = carregar_dados()
-# Carrega TUDO do usuário (sem filtro de data para não sumir dados futuros/recentes)
 df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) & 
                    (df_total['Status'] != 'Lixeira')].copy()
 
@@ -211,23 +186,20 @@ if nav_opcao == "📝 LANÇAR":
         v1 = c1.number_input("Urbano (99/Uber)", min_value=0.0, value=None, placeholder="R$ 0,00")
         v2 = c2.number_input("BoraAli", min_value=0.0, value=None, placeholder="R$ 0,00")
         v3 = c1.number_input("app163", min_value=0.0, value=None, placeholder="R$ 0,00")
-        v4 = c2.number_input("Outros (Receita)", min_value=0.0, value=None, placeholder="R$ 0,00")
+        v4 = c2.number_input("Outros", min_value=0.0, value=None, placeholder="R$ 0,00")
 
     st.markdown("##### 💸 Custos do Dia")
     with st.container(border=True):
         d1, d2 = st.columns(2)
-        # Campos renomeados conforme solicitado
         cust_e = d1.number_input("Combustível/Energia", min_value=0.0, value=None, placeholder="R$ 0,00")
         cust_m = d2.number_input("Manutenção", min_value=0.0, value=None, placeholder="R$ 0,00")
         cust_s = d1.number_input("Seguro", min_value=0.0, value=None, placeholder="R$ 0,00")
         cust_o = d2.number_input("Documentos/Multas", min_value=0.0, value=None, placeholder="R$ 0,00")
         cust_a = d1.number_input("Mensalidades Apps", min_value=0.0, value=None, placeholder="R$ 0,00")
-        # "Outros" mapeado para Alimentacao (Coluna original) para manter compatibilidade
         cust_f = d2.number_input("Outros", min_value=0.0, value=None, placeholder="R$ 0,00")
     
     st.markdown("##### 🚗 Hodômetro")
     u_km = 0
-    # Lógica Blindada para KM: Busca no DF completo, ordenado por data
     if not df_user.empty:
         try:
             df_km_valid = df_user.sort_values(by='Data', ascending=False)
@@ -257,17 +229,20 @@ if nav_opcao == "📝 LANÇAR":
         st.success("Lançamento salvo com sucesso!"); time.sleep(1); st.rerun()
 
 elif nav_opcao == "📊 DASHBOARD":
-    # Verifica DF completo (sem filtro de data <= hoje)
     if df_user.empty: st.info("Nenhum dado lançado ainda.")
     else:
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         
-        # Smart Filter: Pega a última data registrada no banco
-        if not df_bi.empty:
-            ultima_data_registrada = df_bi['Data'].max()
-            ano_padrao = ultima_data_registrada.year
-            mes_padrao = ultima_data_registrada.month
+        # --- FILTRO INTELIGENTE (ANTI-FUTURO) ---
+        # 1. Encontra datas que são <= HOJE para definir o padrão
+        df_passado = df_bi[df_bi['Data'].dt.date <= HOJE_BR]
+        
+        if not df_passado.empty:
+            ultima_data_valida = df_passado['Data'].max()
+            ano_padrao = ultima_data_valida.year
+            mes_padrao = ultima_data_valida.month
         else:
+            # Se só tiver futuro ou estiver vazio, usa hoje
             ano_padrao = HOJE_BR.year
             mes_padrao = HOJE_BR.month
             
@@ -279,6 +254,8 @@ elif nav_opcao == "📊 DASHBOARD":
             if str(HOJE_BR.year) not in anos_disp: anos_disp.insert(0, str(HOJE_BR.year))
             
             meses_map = {1:"Janeiro", 2:"Fevereiro", 3:"Março", 4:"Abril", 5:"Maio", 6:"Junho", 7:"Julho", 8:"Agosto", 9:"Setembro", 10:"Outubro", 11:"Novembro", 12:"Dezembro"}
+            
+            # Define índices baseados na DATA VÁLIDA (não na data futura de erro)
             try: idx_ano = anos_disp.index(str(ano_padrao))
             except: idx_ano = 0
             idx_mes = mes_padrao - 1
@@ -296,11 +273,13 @@ elif nav_opcao == "📊 DASHBOARD":
                 m_num = list(meses_map.keys())[list(meses_map.values()).index(sel_mes)]
                 df_f = df_f[df_f['Data'].dt.month == m_num]
 
-        # Cálculos
+        # Cálculos de Colunas Auxiliares para Exibição
         df_f['Receita'] = df_f[['Urbano','Boraali','app163','Outros_Receita']].sum(axis=1)
         df_f['Custos'] = df_f[['Energia','Manuten','Seguro','Outros_Custos','Aplicativo','Alimentacao']].sum(axis=1)
-        df_f['Km rodados'] = (df_f['KM_Final'] - df_f['KM_Inicial']).clip(lower=0)
         df_f['Lucro'] = df_f['Receita'] - df_f['Custos']
+        df_f['Km rodados'] = (df_f['KM_Final'] - df_f['KM_Inicial']).clip(lower=0)
+        
+        # Totais
         tr, tc, tl, tk = df_f['Receita'].sum(), df_f['Custos'].sum(), df_f['Lucro'].sum(), df_f['Km rodados'].sum()
         
         st.markdown("#### 💵 Performance Financeira")
@@ -318,20 +297,40 @@ elif nav_opcao == "📊 DASHBOARD":
         st.markdown("#### 📋 Extrato Completo")
         st.caption("↔️ Arraste para o lado para ver mais detalhes")
         
+        # PREPARAÇÃO DA TABELA REORGANIZADA
         df_ex = df_f.copy()
-        df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m/%Y')
-        cols_display = [c for c in COLUNAS_OFICIAIS if c in df_ex.columns and c != 'CPF']
+        df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m') # Encurtado para caber melhor
+        
+        # Ordem Solicitada: Data -> Totais -> Ganhos -> Custos -> KM -> Motorista
+        cols_ordered = [
+            'Data', 'Receita', 'Custos', 'Lucro', # Principais
+            'Urbano', 'Boraali', 'app163', 'Outros_Receita', # Ganhos
+            'Energia', 'Manuten', 'Seguro', 'Outros_Custos', 'Aplicativo', 'Alimentacao', # Custos
+            'KM_Inicial', 'KM_Final', 'Usuario', 'ID_Unico'
+        ]
+        
+        # Filtra apenas colunas que existem no DF
+        cols_final = [c for c in cols_ordered if c in df_ex.columns]
         
         st.dataframe(
-            df_ex[cols_display], 
+            df_ex[cols_final], 
             use_container_width=True, 
             height=350,
             hide_index=True,
             column_config={
                 "ID_Unico": st.column_config.TextColumn("ID", width="small"),
-                "Data": st.column_config.TextColumn("Data", width="medium"),
-                "Detalhes": st.column_config.TextColumn("Obs", width="large"),
-                "Usuario": st.column_config.TextColumn("Motorista", width="medium")
+                "Data": st.column_config.TextColumn("Data", width="small"),
+                "Receita": st.column_config.NumberColumn("Faturamento", format="R$ %.2f", width="small"),
+                "Custos": st.column_config.NumberColumn("Custos", format="R$ %.2f", width="small"),
+                "Lucro": st.column_config.NumberColumn("Lucro", format="R$ %.2f", width="small"),
+                "Urbano": st.column_config.NumberColumn("Urbano", format="%.0f", width="small"),
+                "Boraali": st.column_config.NumberColumn("BoraAli", format="%.0f", width="small"),
+                "app163": st.column_config.NumberColumn("163", format="%.0f", width="small"),
+                "Energia": st.column_config.NumberColumn("Energia", format="%.0f", width="small"),
+                "Manuten": st.column_config.NumberColumn("Manut.", format="%.0f", width="small"),
+                "Usuario": st.column_config.TextColumn("Motorista", width="medium"),
+                "KM_Inicial": st.column_config.NumberColumn("KM Ini", format="%d", width="small"),
+                "KM_Final": st.column_config.NumberColumn("KM Fim", format="%d", width="small")
             }
         )
         
@@ -371,7 +370,7 @@ elif nav_opcao == "📊 DASHBOARD":
                             color_discrete_map={'Fat_KM': '#17a2b8', 'Lucro_KM': '#6c757d'})
             st.plotly_chart(configurar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
 
-st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v12</div><br>", unsafe_allow_html=True)
+st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v13</div><br>", unsafe_allow_html=True)
 if st.button("Sair"): 
     st.session_state.autenticado = False
     st.query_params.clear(); st.rerun()
