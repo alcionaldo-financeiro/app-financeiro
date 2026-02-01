@@ -15,6 +15,8 @@ st.markdown("""
         #MainMenu, header, footer, .stDeployButton {display: none !important;}
         [data-testid="stToolbar"], [data-testid="stDecoration"] {display: none !important;}
         .block-container {padding-top: 1rem !important; padding-bottom: 5rem !important;}
+        
+        /* Botões */
         div.stButton > button[kind="primary"] {
             background-color: #28a745 !important;
             color: white !important;
@@ -23,6 +25,8 @@ st.markdown("""
             font-weight: bold !important;
             width: 100% !important;
         }
+        
+        /* Métricas */
         [data-testid="stMetric"] {
             background-color: #ffffff !important;
             border: 1px solid #cccccc !important;
@@ -32,13 +36,30 @@ st.markdown("""
         [data-testid="stMetricLabel"] { color: #333333 !important; font-weight: bold !important; font-size: 0.9rem !important; }
         [data-testid="stMetricValue"] { color: #000000 !important; font-weight: 800 !important; font-size: 1.2rem !important; }
         
-        /* Estilo para separar os blocos */
-        .bloco-titulo {
-            font-size: 1.2rem;
+        /* Ajuste do Radio para parecer Abas */
+        div[role="radiogroup"] {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            background-color: #f0f2f6;
+            padding: 5px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        div[role="radiogroup"] label {
+            flex: 1;
+            text-align: center;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin: 0 5px;
+            padding: 10px;
             font-weight: bold;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
-            border-bottom: 2px solid #eee;
+        }
+        div[role="radiogroup"] label[data-checked="true"] {
+            background-color: #28a745 !important;
+            color: white !important;
+            border-color: #28a745 !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -76,6 +97,7 @@ def salvar_no_banco(df_novo):
     st.cache_data.clear()
 
 # --- 3. LOGIN COM PERSISTÊNCIA ---
+# Recupera parametros da URL para preencher automaticamente
 params = st.query_params
 u_url = params.get("user", "")
 c_url = limpar_cpf(params.get("cpf", ""))
@@ -83,21 +105,30 @@ c_url = limpar_cpf(params.get("cpf", ""))
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
+# Se já tem dados na URL e não está autenticado, tenta autenticar direto (Opcional, ou preenche os campos)
+# Aqui optamos por preencher os campos para o usuário confirmar
 if not st.session_state.autenticado:
-    if u_url and len(c_url) == 11:
-        st.session_state.update({'usuario': u_url, 'cpf_usuario': c_url, 'autenticado': True})
-    else:
-        st.title("💎 BYD Pro Login")
-        n_in = st.text_input("Nome:", value=u_url)
-        c_in = st.text_input("CPF:", value=c_url, max_chars=11)
-        if st.button("ENTRAR ✅", type="primary"):
-            c_l = limpar_cpf(c_in)
-            if n_in and len(c_l) == 11:
-                st.session_state.update({'usuario': n_in, 'cpf_usuario': c_l, 'autenticado': True})
-                st.query_params.update({"user": n_in, "cpf": c_l})
-                st.rerun()
-            else: st.error("⚠️ Dados inválidos.")
-        st.stop()
+    st.title("💎 BYD Pro Login")
+    
+    # Se houver dados na sessão anterior ou URL, usa como valor padrão
+    default_user = u_url if u_url else st.session_state.get('last_user', '')
+    default_cpf = c_url if c_url else st.session_state.get('last_cpf', '')
+    
+    n_in = st.text_input("Nome:", value=default_user)
+    c_in = st.text_input("CPF:", value=default_cpf, max_chars=11)
+    
+    if st.button("ENTRAR ✅", type="primary"):
+        c_l = limpar_cpf(c_in)
+        if n_in and len(c_l) == 11:
+            st.session_state.update({'usuario': n_in, 'cpf_usuario': c_l, 'autenticado': True})
+            # Salva na sessão para facilitar re-login
+            st.session_state.last_user = n_in
+            st.session_state.last_cpf = c_l
+            # Atualiza URL para salvar estado se o usuário favoritar a página
+            st.query_params.update({"user": n_in, "cpf": c_l})
+            st.rerun()
+        else: st.error("⚠️ Dados inválidos.")
+    st.stop()
 
 # --- 4. APP ---
 df_total = carregar_dados()
@@ -105,13 +136,10 @@ df_user = df_total[(df_total['CPF'] == st.session_state.cpf_usuario) &
                    (df_total['Status'] != 'Lixeira') & 
                    (df_total['Data'].dt.date <= HOJE_BR)].copy()
 
-# AQUI ESTÁ A CORREÇÃO DO PULO: key="abas_navegacao"
-tab1, tab2 = st.tabs(["📝 LANÇAR", "📊 DASHBOARD"]) # Removido o key se sua versão for antiga, mas o comportamento padrão deve manter. Se pular, o key resolveria em versões recentes. Vou deixar sem key explicito primeiro pois em algumas versões antigas dava erro, mas vou mudar a logica do filtro para não usar form.
+# NAVEGAÇÃO SEGURA (Substituindo Tabs por Radio para evitar pulos)
+nav_opcao = st.radio("", ["📝 LANÇAR", "📊 DASHBOARD"], horizontal=True, label_visibility="collapsed")
 
-# ATUALIZAÇÃO: Para garantir que não pule, em versões novas usamos o ID.
-# Como você pediu para não quebrar, vou usar a estrutura padrão mas isolar os inputs.
-
-with tab1:
+if nav_opcao == "📝 LANÇAR":
     st.subheader(f"Olá, {st.session_state.usuario}")
     data_lanc = st.date_input("Data do Trabalho:", value=HOJE_BR, format="DD/MM/YYYY")
     
@@ -147,17 +175,13 @@ with tab1:
         salvar_no_banco(pd.concat([df_total, pd.DataFrame([nova])], ignore_index=True))
         st.success("Salvo!"); time.sleep(1); st.rerun()
 
-with tab2:
+elif nav_opcao == "📊 DASHBOARD":
     if df_user.empty: st.info("Sem dados até hoje.")
     else:
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         
-        # FILTROS (DEVOLVIDOS)
+        # FILTROS
         st.markdown("### 🔍 Filtros")
-        
-        # O problema do pulo acontece aqui.
-        # Vamos manter a estrutura visual, mas o Streamlit deve manter a aba
-        # se não houver um rerun explicito vindo de fora.
         
         f_dia = st.date_input("Filtrar Dia Específico", value=None, format="DD/MM/YYYY")
         
@@ -198,12 +222,11 @@ with tab2:
         m5.metric("R$/KM", format_br(tr/tk if tk > 0 else 0))
         m6.metric("Lucro/KM", format_br(tl/tk if tk > 0 else 0))
 
-        # 2. TABELA COMPLETA (ESTILO EXCEL)
+        # 2. TABELA COMPLETA
         st.markdown("### 📋 Lançamentos")
         df_ex = df_f.copy()
         df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m/%Y')
         
-        # Renomear colunas para bater com sua imagem
         df_ex = df_ex.rename(columns={'Outros_Receita':'Outros (Rec)', 'Outros_Custos':'Documento', 'Alimentacao':'Alimentação', 'KM_Inicial':'KM Inicial', 'KM_Final':'KM final'})
         
         cols_final = [
