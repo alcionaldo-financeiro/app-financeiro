@@ -7,20 +7,42 @@ import time
 import pytz
 import plotly.express as px
 
-# --- 1. CONFIGURAÇÃO ---
+# --- 1. CONFIGURAÇÃO MOBILE-FIRST ---
 st.set_page_config(page_title="BYD Pro", page_icon="💎", layout="wide", initial_sidebar_state="collapsed")
 
+# CSS para VISIBILIDADE TOTAL e Botões Verdes
 st.markdown("""
     <style>
         #MainMenu, header, footer, .stDeployButton {display: none !important;}
         [data-testid="stToolbar"], [data-testid="stDecoration"] {display: none !important;}
         .block-container {padding-top: 1rem !important; padding-bottom: 5rem !important;}
+        
+        /* Botão Salvar Verde */
         div.stButton > button[kind="primary"] {
-            background-color: #28a745 !important; color: white !important;
-            border-radius: 12px !important; height: 3.5rem !important;
-            font-weight: bold !important; width: 100% !important;
+            background-color: #28a745 !important;
+            color: white !important;
+            border-radius: 12px !important;
+            height: 3.5rem !important;
+            font-weight: bold !important;
+            width: 100% !important;
         }
-        [data-testid="stMetric"] { background-color: #ffffff; border: 1px solid #eee; padding: 10px; border-radius: 10px; }
+        
+        /* CORREÇÃO DE VISIBILIDADE DOS CARDS */
+        [data-testid="stMetric"] {
+            background-color: #ffffff !important;
+            border: 1px solid #cccccc !important;
+            padding: 15px !important;
+            border-radius: 10px !important;
+        }
+        [data-testid="stMetricLabel"] {
+            color: #333333 !important; /* Cinza Escuro quase preto */
+            font-weight: bold !important;
+            font-size: 1rem !important;
+        }
+        [data-testid="stMetricValue"] {
+            color: #000000 !important; /* Preto Puro */
+            font-weight: 800 !important;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -54,31 +76,37 @@ def carregar_dados():
         return df
     except: return pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
-# --- 3. LOGIN ---
+# --- 3. LOGIN COM MEMÓRIA ---
 if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
-p = st.query_params
-q_n, q_c = p.get("n", ""), limpar_cpf(p.get("c", ""))
+if 'usuario' not in st.session_state: st.session_state['usuario'] = ""
+if 'cpf_usuario' not in st.session_state: st.session_state['cpf_usuario'] = ""
+
+params = st.query_params
+q_n = params.get("n", st.session_state['usuario'])
+q_c = limpar_cpf(params.get("c", st.session_state['cpf_usuario']))
 
 if not st.session_state['autenticado']:
     if q_n and len(q_c) == 11:
-        st.session_state.update({'usuario': q_n.lower(), 'cpf_usuario': q_c, 'autenticado': True})
+        st.session_state.update({'usuario': q_n, 'cpf_usuario': q_c, 'autenticado': True})
         st.rerun()
+    
     st.title("💎 BYD Pro")
-    n_in = st.text_input("Nome:")
-    c_in = st.text_input("CPF:", max_chars=11)
+    n_in = st.text_input("Nome:", value=st.session_state['usuario'])
+    c_in = st.text_input("CPF (Apenas números):", value=st.session_state['cpf_usuario'], max_chars=11)
+    
     if st.button("ENTRAR ✅", type="primary"):
         c_l = limpar_cpf(c_in)
         if n_in and len(c_l) == 11:
-            st.session_state.update({'usuario': n_in.lower(), 'cpf_usuario': c_l, 'autenticado': True})
+            st.session_state.update({'usuario': n_in, 'cpf_usuario': c_l, 'autenticado': True})
             st.rerun()
+        else: st.error("⚠️ Verifique os dados.")
     st.stop()
 
 # --- 4. APP ---
 df_user = carregar_dados()
 df_user = df_user[(df_user['CPF'] == st.session_state['cpf_usuario']) & (df_user['Status'] != 'Lixeira')].copy()
 
-# ABAS (Sem o parâmetro 'key' que causou o erro)
-tab1, tab2 = st.tabs(["📝 LANÇAR DADOS", "📊 DASHBOARD"])
+tab1, tab2 = st.tabs(["📝 LANÇAR", "📊 DASHBOARD"])
 
 with tab1:
     with st.expander("⚙️ Importar Excel"):
@@ -106,13 +134,14 @@ with tab1:
     v3 = st.number_input("App 163", min_value=0.0)
     v4 = st.number_input("Particular / Outros", min_value=0.0)
     st.markdown("### 💸 Custos")
-    c1 = st.number_input("Energia / Combustível", min_value=0.0)
-    c2 = st.number_input("Manutenção / Lavagem", min_value=0.0)
-    c3 = st.number_input("Seguro / Docs", min_value=0.0)
-    c4 = st.number_input("Alimentação", min_value=0.0)
-    c5 = st.number_input("Internet / Apps", min_value=0.0)
-    c6 = st.number_input("Outros Custos", min_value=0.0)
-    st.markdown("### 🚗 Rodagem")
+    col_c1, col_c2 = st.columns(2)
+    c1 = col_c1.number_input("Energia", min_value=0.0)
+    c2 = col_c2.number_input("Manutenção", min_value=0.0)
+    c3 = col_c1.number_input("Seguro", min_value=0.0)
+    c4 = col_c2.number_input("Alimentação", min_value=0.0)
+    c5 = col_c1.number_input("Apps/Internet", min_value=0.0)
+    c6 = col_c2.number_input("Outros", min_value=0.0)
+    st.markdown("### 🚗 KM")
     u_km = int(df_user['KM_Final'].max()) if not df_user.empty else 0
     k_ini = st.number_input("KM Inicial (Editável)", value=u_km)
     k_fim = st.number_input("KM Final Atual", min_value=0)
@@ -133,28 +162,38 @@ with tab2:
         df_bi['KMR'] = (df_bi['KM_Final'] - df_bi['KM_Inicial']).clip(lower=0)
         
         st.markdown("### 🔍 Filtros")
+        f_dia = st.date_input("Filtrar Dia Específico", value=None)
+        col_f1, col_f2 = st.columns(2)
         anos = ["Todos"] + sorted([str(int(y)) for y in df_bi['Data'].dt.year.dropna().unique()], reverse=True)
-        sel_ano = st.selectbox("Ano", anos)
+        sel_ano = col_f1.selectbox("Ano", anos)
         meses_pt = ["Todos","Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
-        sel_mes = st.selectbox("Mês", meses_pt)
+        sel_mes = col_f2.selectbox("Mês", meses_pt)
         
         df_f = df_bi.copy()
+        if f_dia: df_f = df_f[df_f['Data'].dt.date == f_dia]
         if sel_ano != "Todos": df_f = df_f[df_f['Data'].dt.year == int(sel_ano)]
         if sel_mes != "Todos": df_f = df_f[df_f['Data'].dt.month == meses_pt.index(sel_mes)]
 
         tr, tc, tl, tk = df_f['Rec'].sum(), df_f['Cus'].sum(), df_f['Lucro'].sum(), df_f['KMR'].sum()
-        c1, c2 = st.columns(2)
-        c1.metric("Faturamento", format_br(tr)); c1.metric("Lucro Líquido", format_br(tl)); c1.metric("Faturamento / KM", format_br(tr/tk if tk > 0 else 0))
-        c2.metric("Custos", format_br(tc)); c2.metric("KM Rodado", f"{tk:,.0f} km".replace(",", ".")); c2.metric("Lucro / KM", format_br(tl/tk if tk > 0 else 0))
+        
+        # INDICADORES (KPIs)
+        st.metric("Faturamento Total", format_br(tr))
+        st.metric("Lucro Líquido", format_br(tl))
+        st.metric("Custos Totais", format_br(tc))
+        st.metric("KM Rodado", f"{tk:,.0f} km".replace(",", "."))
+        st.metric("Faturamento / KM", format_br(tr/tk if tk > 0 else 0))
+        st.metric("Lucro / KM", format_br(tl/tk if tk > 0 else 0))
 
         st.markdown("### 📊 Gráficos")
         df_f['Dia'] = df_f['Data'].dt.strftime('%d/%m')
         df_g = df_f.groupby('Dia').agg({'Rec':'sum','Cus':'sum','KMR':'sum'}).reset_index().sort_values('Dia')
         
-        fig1 = px.bar(df_g, x='Dia', y=['Rec', 'Cus'], barmode='group', color_discrete_map={'Rec':'#28a745','Cus':'#dc3545'}, text_auto='.2s', labels={'value':'R$', 'variable':'Tipo'})
+        fig1 = px.bar(df_g, x='Dia', y=['Rec', 'Cus'], barmode='group', color_discrete_map={'Rec':'#28a745','Cus':'#dc3545'}, text_auto='.2s')
         st.plotly_chart(fig1, use_container_width=True)
         
-        fig2 = px.pie(names=['Energia','Manuten','Seguro','Apps','Alimentos','Outros'], values=[df_f['Energia'].sum(), df_f['Manuten'].sum(), df_f['Seguro'].sum(), df_f['Aplicativo'].sum(), df_f['Alimentacao'].sum(), df_f['Outros_Custos'].sum()], hole=0.4, title="Distribuição de Custos")
+        fig2 = px.pie(names=['Energia','Manuten','Seguro','Apps','Alimentos','Outros'], values=[df_f['Energia'].sum(), df_f['Manuten'].sum(), df_f['Seguro'].sum(), df_f['Aplicativo'].sum(), df_f['Alimentacao'].sum(), df_f['Outros_Custos'].sum()], hole=0.4)
         st.plotly_chart(fig2, use_container_width=True)
 
-if st.button("Sair"): st.session_state['autenticado'] = False; st.rerun()
+if st.button("Sair"): 
+    st.session_state['autenticado'] = False
+    st.rerun()
