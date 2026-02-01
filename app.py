@@ -113,10 +113,21 @@ def carregar_dados():
         return df
     except: return pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
-def salvar_no_banco(df_novo):
+def salvar_com_auditoria(df_novo, id_verificacao):
+    """Salva e confere se realmente salvou."""
     conn = st.connection("gsheets", type=GSheetsConnection)
     conn.update(worksheet=0, data=df_novo)
     st.cache_data.clear()
+    
+    # Auditoria de Salvamento (Espera até 3s para o Google processar)
+    sucesso = False
+    for _ in range(3):
+        time.sleep(1)
+        df_check = conn.read(worksheet=0, ttl=0)
+        if id_verificacao in df_check['ID_Unico'].values:
+            sucesso = True
+            break
+    return sucesso
 
 # --- 3. TELA DE LOGIN ---
 params = st.query_params
@@ -215,9 +226,13 @@ if nav_opcao == "📝 LANÇAR":
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("SALVAR REGISTRO", type="primary", key="btn_salvar"):
         km_f_real = float(k_fim) if k_fim and float(k_fim) > 0 else float(k_ini)
+        
+        # Gera ID
+        novo_id = str(int(time.time()))
+        
         nova = {col: 0 for col in COLUNAS_OFICIAIS}
         nova.update({
-            'ID_Unico': str(int(time.time())), 'Status': 'Ativo', 
+            'ID_Unico': novo_id, 'Status': 'Ativo', 
             'Usuario': st.session_state.usuario, 'CPF': st.session_state.cpf_usuario, 
             'Data': data_lanc.strftime("%Y-%m-%d"), 
             'Urbano': v(v1), 'Boraali': v(v2), 'app163': v(v3), 'Outros_Receita': v(v4), 
@@ -225,15 +240,34 @@ if nav_opcao == "📝 LANÇAR":
             'Outros_Custos': v(cust_o), 'Aplicativo': v(cust_a), 'Alimentacao': v(cust_f), 
             'KM_Inicial': float(k_ini), 'KM_Final': km_f_real
         })
-        salvar_no_banco(pd.concat([df_total, pd.DataFrame([nova])], ignore_index=True))
-        st.success("Lançamento salvo com sucesso!"); time.sleep(1); st.rerun()
+        
+        df_novo_completo = pd.concat([df_total, pd.DataFrame([nova])], ignore_index=True)
+        
+        with st.spinner("Salvando e conferindo no banco de dados..."):
+            if salvar_com_auditoria(df_novo_completo, novo_id):
+                st.success("✅ Confirmado! Dados salvos e auditados.")
+                
+                # LIMPEZA AUTOMÁTICA DOS CAMPOS
+                campos_limpar = [
+                    "rec_urbano", "rec_boraali", "rec_app163", "rec_outros",
+                    "desp_energia", "desp_manut", "desp_seguro", "desp_docs", "desp_apps", "desp_outros_f",
+                    "km_final_input"
+                ]
+                for campo in campos_limpar:
+                    if campo in st.session_state:
+                        st.session_state[campo] = None
+                
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("⚠️ Atenção: O Google Sheets está demorando. Aguarde um minuto e verifique se o dado apareceu antes de lançar de novo.")
 
 elif nav_opcao == "📊 DASHBOARD":
     if df_user.empty: st.info("Nenhum dado lançado ainda.")
     else:
+        # Garante ordenação correta para o filtro pegar o ultimo registro real
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         
-        # --- FILTRO INTELIGENTE ---
         df_passado = df_bi[df_bi['Data'].dt.date <= HOJE_BR]
         if not df_passado.empty:
             ultima_data_valida = df_passado['Data'].max()
@@ -259,7 +293,6 @@ elif nav_opcao == "📊 DASHBOARD":
             sel_ano = fc1.selectbox("Ano", ["Todos"] + anos_disp, index=idx_ano+1 if "Todos" in ["Todos"]+anos_disp else 0, key="filtro_ano")
             sel_mes = fc2.selectbox("Mês", ["Todos"] + list(meses_map.values()), index=idx_mes+1, key="filtro_mes")
         
-        # Aplica Filtros
         df_f = df_bi.copy()
         if f_dia: 
             df_f = df_f[df_f['Data'].dt.date == f_dia]
@@ -268,6 +301,9 @@ elif nav_opcao == "📊 DASHBOARD":
             if sel_mes != "Todos": 
                 m_num = list(meses_map.keys())[list(meses_map.values()).index(sel_mes)]
                 df_f = df_f[df_f['Data'].dt.month == m_num]
+
+        # REORDENAÇÃO CRÍTICA PARA TABELA (Mais recente no topo)
+        df_f = df_f.sort_values(by='Data', ascending=False)
 
         # Cálculos
         df_f['Receita'] = df_f[['Urbano','Boraali','app163','Outros_Receita']].sum(axis=1)
@@ -360,7 +396,7 @@ elif nav_opcao == "📊 DASHBOARD":
                             color_discrete_map={'Fat_KM': '#17a2b8', 'Lucro_KM': '#6c757d'})
             st.plotly_chart(configurar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
 
-st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v15</div><br>", unsafe_allow_html=True)
+st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v16</div><br>", unsafe_allow_html=True)
 if st.button("Sair"): 
     st.session_state.autenticado = False
     st.query_params.clear(); st.rerun()
