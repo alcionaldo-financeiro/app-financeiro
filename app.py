@@ -33,7 +33,8 @@ COLUNAS_OFICIAIS = [
 ]
 
 def format_br(valor):
-    return f"R$ {valor:,.2d}".replace(",", "X").replace(".", ",").replace("X", ".") if valor >= 0 else f"- R$ {abs(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    # Corrigido de .2d para .2f para aceitar centavos
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def format_km(valor):
     return f"{valor:,.0f} km".replace(",", ".")
@@ -59,7 +60,7 @@ def carregar_dados():
         cols_num = ['Urbano', 'Boraali', 'app163', 'Outros_Receita', 'Energia', 'Manuten', 'Seguro', 'Aplicativo', 'Alimentacao', 'Outros_Custos', 'KM_Inicial', 'KM_Final']
         for c in cols_num: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
-        # Trava anti-duplicidade (remove linhas idênticas)
+        # Anti-duplicidade
         df = df.drop_duplicates(subset=['Data', 'Urbano', 'KM_Final', 'CPF'], keep='first')
         return df
     except: return pd.DataFrame(columns=COLUNAS_OFICIAIS)
@@ -85,7 +86,6 @@ df_user = df_total[(df_total['CPF'] == CPF_LOGADO) & (df_total['Status'] != 'Lix
 aba1, aba2 = st.tabs(["📝 LANÇAR DADOS", "📊 PERFORMANCE E BI"])
 
 with aba1:
-    # Botão de importação ultra discreto
     with st.expander("⚙️", expanded=False):
         arq = st.file_uploader("Importar Excel", type=["xlsx"])
         if arq and st.button("Confirmar Importação"):
@@ -102,9 +102,8 @@ with aba1:
                 n.update({'ID_Unico': str(int(time.time())+i), 'Status': 'Ativo', 'Usuario': st.session_state['usuario'], 'CPF': CPF_LOGADO})
                 novas.append(n)
             conn.update(worksheet=0, data=pd.concat([carregar_dados(), pd.DataFrame(novas)], ignore_index=True))
-            st.cache_data.clear(); st.success("Importado com sucesso!"); time.sleep(1); st.rerun()
+            st.cache_data.clear(); st.success("Importado!"); time.sleep(1); st.rerun()
 
-    # Form
     col_r, col_c = st.columns(2)
     with col_r:
         st.subheader("Ganhos")
@@ -115,18 +114,18 @@ with aba1:
     with col_c:
         st.subheader("Custos")
         v_ene = st.number_input("Energia / Comb", min_value=0.0, step=5.0)
-        v_man = st.number_input("Manutenção / Lavagem", min_value=0.0, step=5.0)
+        v_man = st.number_input("Manutenção", min_value=0.0, step=5.0)
         v_seg = st.number_input("Seguro / Docs", min_value=0.0, step=5.0)
         v_ali = st.number_input("Alimentação", min_value=0.0, step=5.0)
 
     st.subheader("Rodagem")
     c_k1, c_k2 = st.columns(2)
     u_km = int(df_user['KM_Final'].max()) if not df_user.empty else 0
-    k1 = c_k1.number_input("KM Inicial (Último KM)", value=u_km, disabled=True)
-    k2 = c_k2.number_input("KM Final (Painel do Carro)", value=0)
+    k1 = c_k1.number_input("KM Inicial (Inalterável)", value=u_km, disabled=True)
+    k2 = c_k2.number_input("KM Final (Painel)", value=0)
     
     if st.button("CONFERIR E SALVAR ➡️", type="primary"):
-        if k2 > 0 and k2 <= k1: st.error("Erro: KM Final deve ser maior que o Inicial.")
+        if k2 > 0 and k2 <= k1: st.error("Erro: KM Final deve ser maior.")
         else:
             nova = {col: 0 for col in COLUNAS_OFICIAIS}
             nova.update({'Urbano':v_urb,'Boraali':v_bora,'app163':v_163,'Outros_Receita':v_out_r,'Energia':v_ene,'Manuten':v_man,'Seguro':v_seg,'Alimentacao':v_ali,'KM_Inicial':k1,'KM_Final':k2 if k2 > 0 else k1,'ID_Unico': str(int(time.time())), 'Status': 'Ativo', 'Usuario': st.session_state['usuario'], 'CPF': CPF_LOGADO, 'Data': datetime.now(FUSO_BR).strftime("%Y-%m-%d")})
@@ -136,76 +135,60 @@ with aba1:
 with aba2:
     if df_user.empty: st.info("Sem dados.")
     else:
-        # Preparação dos Dados
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         df_bi['Receita'] = df_bi[['Urbano','Boraali','app163','Outros_Receita']].sum(axis=1)
         df_bi['Custos'] = df_bi[['Energia','Manuten','Seguro','Aplicativo','Alimentacao','Outros_Custos']].sum(axis=1)
         df_bi['Lucro'] = df_bi['Receita'] - df_bi['Custos']
         df_bi['Km_rodado'] = (df_bi['KM_Final'] - df_bi['KM_Inicial']).clip(lower=0)
         
-        # Filtros de Dashboard
-        st.subheader("🔍 Filtros de Visualização")
-        c_f1, c_f2, c_f3 = st.columns(3)
+        st.subheader("🔍 Filtros")
+        c_f1, c_f2 = st.columns(2)
         anos = ["Todos"] + sorted(list(df_bi['Data'].dt.year.unique().astype(str)), reverse=True)
-        ano_sel = c_f1.selectbox("Ano", anos)
-        
+        ano_sel = c_f1.selectbox("Filtrar Ano", anos)
         meses = ["Todos", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-        mes_sel = c_f2.selectbox("Mês", meses)
+        mes_sel = c_f2.selectbox("Filtrar Mês", meses)
         
-        # Aplicar Filtro
         df_filt = df_bi.copy()
         if ano_sel != "Todos": df_filt = df_filt[df_filt['Data'].dt.year == int(ano_sel)]
         if mes_sel != "Todos": df_filt = df_filt[df_filt['Data'].dt.month == meses.index(mes_sel)]
         
-        # --- CARDS DE TOTAIS (RESPEITAM FILTRO) ---
-        t_rec = df_filt['Receita'].sum()
-        t_cus = df_filt['Custos'].sum()
-        t_luc = df_filt['Lucro'].sum()
-        t_km = df_filt['Km_rodado'].sum()
-        
+        # --- CARDS TOTAIS ---
+        t_rec, t_cus, t_luc, t_km = df_filt['Receita'].sum(), df_filt['Custos'].sum(), df_filt['Lucro'].sum(), df_filt['Km_rodado'].sum()
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Faturamento Total", format_br(t_rec))
         m2.metric("Lucro Líquido", format_br(t_luc))
-        m3.metric("KM Total Rodado", format_km(t_km))
+        m3.metric("KM Total", format_km(t_km))
         m4.metric("Lucro por KM", format_br(t_luc/t_km if t_km > 0 else 0))
 
-        # --- TABELA DE DADOS ---
-        st.subheader("📋 Tabela de Registros")
+        # --- TABELA (NO TOPO) ---
+        st.subheader("📋 Detalhamento dos Lançamentos")
         st.dataframe(df_filt, use_container_width=True, hide_index=True)
 
-        # --- GRÁFICOS ---
+        # --- GRÁFICOS DE BARRA ---
         st.divider()
-        st.subheader("📊 Gráficos de Eficiência")
-        
-        # Agrupar para gráficos
         df_filt['Data_Graf'] = df_filt['Data'].dt.strftime('%d/%m/%Y')
         df_graf = df_filt.groupby('Data_Graf').agg({'Receita':'sum', 'Custos':'sum', 'Lucro':'sum', 'Km_rodado':'sum'}).reset_index()
 
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            st.write("**Ganhos vs Custos por Dia**")
+        c_g1, c_g2 = st.columns(2)
+        with c_g1:
+            st.write("**💰 Ganhos vs Custos**")
             fig1 = px.bar(df_graf, x='Data_Graf', y=['Receita', 'Custos'], barmode='group', color_discrete_map={'Receita':'#28a745', 'Custos':'#dc3545'})
             st.plotly_chart(fig1, use_container_width=True)
             
-            st.write("**Faturamento por App (Proporção)**")
+            st.write("**🏆 Faturamento por App**")
             apps = df_filt[['Urbano','Boraali','app163','Outros_Receita']].sum()
-            fig2 = px.bar(x=apps.index, y=apps.values, labels={'x':'Aplicativo', 'y':'Total R$'})
+            fig2 = px.bar(x=apps.index, y=apps.values, labels={'x':'App', 'y':'R$'}, color_discrete_sequence=['#28a745'])
             st.plotly_chart(fig2, use_container_width=True)
 
-        with col_g2:
-            st.write("**Km Rodados por Dia**")
+        with c_g2:
+            st.write("**🚗 KM Rodados por Dia**")
             fig3 = px.bar(df_graf, x='Data_Graf', y='Km_rodado', color_discrete_sequence=['#007bff'])
             st.plotly_chart(fig3, use_container_width=True)
             
-            st.write("**Impacto nos Custos (Onde você gasta?)**")
-            custos_desc = df_filt[['Energia','Manuten','Seguro','Alimentacao']].sum()
-            fig4 = px.pie(names=custos_desc.index, values=custos_desc.values, hole=0.4)
+            st.write("**🍕 Divisão de Custos**")
+            custos_pie = df_filt[['Energia','Manuten','Seguro','Alimentacao']].sum()
+            fig4 = px.pie(names=custos_pie.index, values=custos_pie.values, hole=0.4)
             st.plotly_chart(fig4, use_container_width=True)
-
-        # --- DIAS TRABALHADOS ---
-        st.divider()
-        dias_trampo = df_filt['Data'].dt.date.nunique()
-        st.info(f"🚗 Você trabalhou **{dias_trampo} dias** no período selecionado. Média de faturamento por dia: **{format_br(t_rec/dias_trampo if dias_trampo > 0 else 0)}**")
 
 if st.button("Sair"):
     st.session_state['autenticado'] = False; st.rerun()
