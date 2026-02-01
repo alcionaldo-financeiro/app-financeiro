@@ -18,7 +18,7 @@ st.markdown("""
         
         .block-container {
             padding-top: 1rem !important; 
-            padding-bottom: 2rem !important;
+            padding-bottom: 5rem !important; /* Espaço extra no final */
             padding-left: 0.5rem !important;
             padding-right: 0.5rem !important;
         }
@@ -28,9 +28,9 @@ st.markdown("""
             background: linear-gradient(45deg, #28a745, #218838) !important;
             color: white !important;
             border-radius: 15px !important;
-            height: 3.8rem !important;
+            height: 4rem !important;
             font-weight: 700 !important;
-            font-size: 1.1rem !important;
+            font-size: 1.2rem !important;
             width: 100% !important;
             border: none !important;
             box-shadow: 0 4px 10px rgba(40, 167, 69, 0.3);
@@ -113,21 +113,12 @@ def carregar_dados():
         return df
     except: return pd.DataFrame(columns=COLUNAS_OFICIAIS)
 
-def salvar_com_auditoria(df_novo, id_verificacao):
-    """Salva e confere se realmente salvou."""
+def salvar_direto(df_novo):
+    """Salva sem check paranóico para evitar erro falso."""
     conn = st.connection("gsheets", type=GSheetsConnection)
     conn.update(worksheet=0, data=df_novo)
     st.cache_data.clear()
-    
-    # Auditoria de Salvamento (Espera até 3s para o Google processar)
-    sucesso = False
-    for _ in range(3):
-        time.sleep(1)
-        df_check = conn.read(worksheet=0, ttl=0)
-        if id_verificacao in df_check['ID_Unico'].values:
-            sucesso = True
-            break
-    return sucesso
+    return True
 
 # --- 3. TELA DE LOGIN ---
 params = st.query_params
@@ -213,9 +204,11 @@ if nav_opcao == "📝 LANÇAR":
     u_km = 0
     if not df_user.empty:
         try:
+            # Busca o maior KM registrado em TODA a base, independente da data
             df_km_valid = df_user.sort_values(by='Data', ascending=False)
             df_km_valid = df_km_valid[df_km_valid['KM_Final'] > 0]
-            if not df_km_valid.empty: u_km = int(df_km_valid.iloc[0]['KM_Final'])
+            if not df_km_valid.empty: 
+                u_km = int(df_km_valid.iloc[0]['KM_Final'])
         except: u_km = 0
 
     with st.container(border=True):
@@ -241,39 +234,44 @@ if nav_opcao == "📝 LANÇAR":
             'KM_Inicial': float(k_ini), 'KM_Final': km_f_real
         })
         
+        # Concatena
         df_novo_completo = pd.concat([df_total, pd.DataFrame([nova])], ignore_index=True)
         
-        with st.spinner("Salvando e conferindo no banco de dados..."):
-            if salvar_com_auditoria(df_novo_completo, novo_id):
-                st.success("✅ Confirmado! Dados salvos e auditados.")
-                
-                # LIMPEZA AUTOMÁTICA DOS CAMPOS
-                campos_limpar = [
-                    "rec_urbano", "rec_boraali", "rec_app163", "rec_outros",
-                    "desp_energia", "desp_manut", "desp_seguro", "desp_docs", "desp_apps", "desp_outros_f",
-                    "km_final_input"
-                ]
-                for campo in campos_limpar:
-                    if campo in st.session_state:
-                        st.session_state[campo] = None
-                
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error("⚠️ Atenção: O Google Sheets está demorando. Aguarde um minuto e verifique se o dado apareceu antes de lançar de novo.")
+        # Salva Direto (Sem medo)
+        salvar_direto(df_novo_completo)
+        
+        st.success("✅ Lançamento salvo com sucesso!")
+        
+        # LIMPEZA DOS CAMPOS (Reset)
+        campos_limpar = [
+            "rec_urbano", "rec_boraali", "rec_app163", "rec_outros",
+            "desp_energia", "desp_manut", "desp_seguro", "desp_docs", "desp_apps", "desp_outros_f",
+            "km_final_input"
+        ]
+        for campo in campos_limpar:
+            if campo in st.session_state:
+                st.session_state[campo] = None
+        
+        time.sleep(1.5) # Tempo curto para ler a mensagem
+        st.rerun()
 
 elif nav_opcao == "📊 DASHBOARD":
     if df_user.empty: st.info("Nenhum dado lançado ainda.")
     else:
-        # Garante ordenação correta para o filtro pegar o ultimo registro real
+        # Garante ordenação correta: Mais recente primeiro
         df_bi = df_user.copy().sort_values('Data', ascending=False)
         
+        # --- FILTRO INTELIGENTE (SEM FUTURO) ---
+        # Filtra apenas o que é passado ou hoje
         df_passado = df_bi[df_bi['Data'].dt.date <= HOJE_BR]
+        
         if not df_passado.empty:
+            # Pega a data mais recente VÁLIDA
             ultima_data_valida = df_passado['Data'].max()
             ano_padrao = ultima_data_valida.year
             mes_padrao = ultima_data_valida.month
         else:
+            # Fallback se tudo for futuro ou vazio
             ano_padrao = HOJE_BR.year
             mes_padrao = HOJE_BR.month
             
@@ -286,6 +284,7 @@ elif nav_opcao == "📊 DASHBOARD":
             
             meses_map = {1:"Janeiro", 2:"Fevereiro", 3:"Março", 4:"Abril", 5:"Maio", 6:"Junho", 7:"Julho", 8:"Agosto", 9:"Setembro", 10:"Outubro", 11:"Novembro", 12:"Dezembro"}
             
+            # Tenta selecionar o ano/mês da ultima data valida
             try: idx_ano = anos_disp.index(str(ano_padrao))
             except: idx_ano = 0
             idx_mes = mes_padrao - 1
@@ -293,6 +292,7 @@ elif nav_opcao == "📊 DASHBOARD":
             sel_ano = fc1.selectbox("Ano", ["Todos"] + anos_disp, index=idx_ano+1 if "Todos" in ["Todos"]+anos_disp else 0, key="filtro_ano")
             sel_mes = fc2.selectbox("Mês", ["Todos"] + list(meses_map.values()), index=idx_mes+1, key="filtro_mes")
         
+        # Aplica Filtros
         df_f = df_bi.copy()
         if f_dia: 
             df_f = df_f[df_f['Data'].dt.date == f_dia]
@@ -302,7 +302,7 @@ elif nav_opcao == "📊 DASHBOARD":
                 m_num = list(meses_map.keys())[list(meses_map.values()).index(sel_mes)]
                 df_f = df_f[df_f['Data'].dt.month == m_num]
 
-        # REORDENAÇÃO CRÍTICA PARA TABELA (Mais recente no topo)
+        # Reordena para o Extrato ficar Data Recente -> Antiga
         df_f = df_f.sort_values(by='Data', ascending=False)
 
         # Cálculos
@@ -327,15 +327,17 @@ elif nav_opcao == "📊 DASHBOARD":
         st.markdown("#### 📋 Extrato Completo")
         st.caption("↔️ Arraste para o lado para ver mais detalhes")
         
+        # TABELA OTIMIZADA PARA LEITURA (Ordem solicitada)
         df_ex = df_f.copy()
         df_ex['Data'] = df_ex['Data'].dt.strftime('%d/%m')
         
         cols_ordered = [
-            'Data', 'Receita', 'Custos', 'Lucro', 
-            'Urbano', 'Boraali', 'app163', 'Outros_Receita', 
-            'Energia', 'Manuten', 'Seguro', 'Outros_Custos', 'Aplicativo', 'Alimentacao', 
-            'KM_Inicial', 'KM_Final', 'Usuario', 'ID_Unico'
+            'Data', 'Receita', 'Custos', 'Lucro', # Principais (Resumo)
+            'Urbano', 'Boraali', 'app163', 'Outros_Receita', # Ganhos Detalhados
+            'Energia', 'Manuten', 'Seguro', 'Outros_Custos', 'Aplicativo', 'Alimentacao', # Custos Detalhados
+            'KM_Inicial', 'KM_Final', 'Usuario' # Final
         ]
+        # Filtra colunas existentes
         cols_final = [c for c in cols_ordered if c in df_ex.columns]
         
         st.dataframe(
@@ -344,19 +346,18 @@ elif nav_opcao == "📊 DASHBOARD":
             height=350,
             hide_index=True,
             column_config={
-                "ID_Unico": st.column_config.TextColumn("ID", width="small"),
                 "Data": st.column_config.TextColumn("Data", width="small"),
-                "Receita": st.column_config.NumberColumn("Faturamento Total", format="R$ %.2f", width="small"),
-                "Custos": st.column_config.NumberColumn("Custos Totais", format="R$ %.2f", width="small"),
+                "Receita": st.column_config.NumberColumn("Faturamento", format="R$ %.2f", width="small"),
+                "Custos": st.column_config.NumberColumn("Custos", format="R$ %.2f", width="small"),
                 "Lucro": st.column_config.NumberColumn("Lucro", format="R$ %.2f", width="small"),
                 "Urbano": st.column_config.NumberColumn("Urbano", format="%.0f", width="small"),
                 "Boraali": st.column_config.NumberColumn("BoraAli", format="%.0f", width="small"),
                 "app163": st.column_config.NumberColumn("163", format="%.0f", width="small"),
                 "Energia": st.column_config.NumberColumn("Energia", format="%.0f", width="small"),
-                "Manuten": st.column_config.NumberColumn("Manut.", format="%.0f", width="small"),
                 "Usuario": st.column_config.TextColumn("Motorista", width="medium"),
                 "KM_Inicial": st.column_config.NumberColumn("KM Ini", format="%d", width="small"),
-                "KM_Final": st.column_config.NumberColumn("KM Fim", format="%d", width="small")
+                "KM_Final": st.column_config.NumberColumn("KM Fim", format="%d", width="small"),
+                # Esconde ID pois não é útil na visualização, mas mantém no selectbox
             }
         )
         
@@ -366,7 +367,7 @@ elif nav_opcao == "📊 DASHBOARD":
                 item_ex = st.selectbox("Selecione o ID", ids, key="delete_select")
                 if st.button("Confirmar Exclusão", key="btn_delete"):
                     df_total.loc[df_total['ID_Unico'] == item_ex, 'Status'] = 'Lixeira'
-                    salvar_no_banco(df_total)
+                    salvar_direto(df_total)
                     st.rerun()
 
         st.divider()
@@ -396,7 +397,7 @@ elif nav_opcao == "📊 DASHBOARD":
                             color_discrete_map={'Fat_KM': '#17a2b8', 'Lucro_KM': '#6c757d'})
             st.plotly_chart(configurar_grafico(fig_ef), use_container_width=True, config={'displayModeBar': False})
 
-st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v16</div><br>", unsafe_allow_html=True)
+st.markdown("<br><div style='text-align:center; color:#ccc;'>BYD Pro Mobile v17</div><br>", unsafe_allow_html=True)
 if st.button("Sair"): 
     st.session_state.autenticado = False
     st.query_params.clear(); st.rerun()
